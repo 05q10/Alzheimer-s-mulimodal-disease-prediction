@@ -1,0 +1,200 @@
+{
+  "primary_model": "GBM",
+  "ship_reason": "GBM (MAE=1.465) is primary production model. GRU Val MAE was 1.525.",
+  "results": {
+    "6": {
+      "horizon": 6,
+      "MMSE_mae": 1.385,
+      "MMSE_mae_ci": "[1.261, 1.513]",
+      "MMSE_pers_mae": 1.425,
+      "MMSE_slope_mae": 1.781,
+      "MMSE_beats_pers": true,
+      "MMSE_beats_slope": true,
+      "CDGLOBAL_mae": 0.064,
+      "CDGLOBAL_mae_ci": "[0.049, 0.08]",
+      "CDGLOBAL_pers_mae": 0.061,
+      "CDGLOBAL_slope_mae": 0.08,
+      "CDGLOBAL_beats_pers": false,
+      "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_mae": 2.841,
+      "TOTSCORE_mae_ci": "[2.609, 3.075]",
+      "TOTSCORE_pers_mae": 2.928,
+      "TOTSCORE_slope_mae": 3.972,
+      "TOTSCORE_beats_pers": true,
+      "TOTSCORE_beats_slope": true,
+      "conversion_auroc": 0.6239,
+      "conversion_auroc_ci": "[0.5357, 0.7087]",
+      "conversion_baseline_auroc": 0.6536,
+      "conversion_baseline_ci": "[0.5734, 0.7354]",
+      "conversion_ece": 0.0111,
+      "n_reversions": 50
+    },
+    "12": {
+      "horizon": 12,
+      "MMSE_mae": 1.465,
+      "MMSE_mae_ci": "[1.354, 1.581]",
+      "MMSE_pers_mae": 1.603,
+      "MMSE_slope_mae": 2.108,
+      "MMSE_beats_pers": true,
+      "MMSE_beats_slope": true,
+      "CDGLOBAL_mae": 0.113,
+      "CDGLOBAL_mae_ci": "[0.097, 0.13]",
+      "CDGLOBAL_pers_mae": 0.112,
+      "CDGLOBAL_slope_mae": 0.139,
+      "CDGLOBAL_beats_pers": false,
+      "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_mae": 2.903,
+      "TOTSCORE_mae_ci": "[2.691, 3.149]",
+      "TOTSCORE_pers_mae": 3.224,
+      "TOTSCORE_slope_mae": 4.828,
+      "TOTSCORE_beats_pers": true,
+      "TOTSCORE_beats_slope": true,
+      "conversion_auroc": 0.7615,
+      "conversion_auroc_ci": "[0.7031, 0.8188]",
+      "conversion_baseline_auroc": 0.7013,
+      "conversion_baseline_ci": "[0.6389, 0.7618]",
+      "conversion_ece": 0.0198,
+      "n_reversions": 59
+    },
+    "24": {
+      "horizon": 24,
+      "MMSE_mae": 1.56,
+      "MMSE_mae_ci": "[1.403, 1.725]",
+      "MMSE_pers_mae": 1.739,
+      "MMSE_slope_mae": 2.408,
+      "MMSE_beats_pers": true,
+      "MMSE_beats_slope": true,
+      "CDGLOBAL_mae": 0.138,
+      "CDGLOBAL_mae_ci": "[0.115, 0.165]",
+      "CDGLOBAL_pers_mae": 0.152,
+      "CDGLOBAL_slope_mae": 0.187,
+      "CDGLOBAL_beats_pers": true,
+      "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_mae": 3.12,
+      "TOTSCORE_mae_ci": "[2.824, 3.441]",
+      "TOTSCORE_pers_mae": 3.665,
+      "TOTSCORE_slope_mae": 6.253,
+      "TOTSCORE_beats_pers": true,
+      "TOTSCORE_beats_slope": true,
+      "conversion_auroc": 0.8111,
+      "conversion_auroc_ci": "[0.7564, 0.8611]",
+      "conversion_baseline_auroc": 0.7291,
+      "conversion_baseline_ci": "[0.668, 0.7889]",
+      "conversion_ece": 0.0221,
+      "n_reversions": 50
+    }
+  },
+  "calibrations": {
+    "6": {
+      "ece": 0.0111,
+      "table": [
+        {
+          "bin": "[0.0, 0.2)",
+          "count": 828,
+          "pred_mean": 0.055,
+          "obs_rate": 0.047
+        },
+        {
+          "bin": "[0.2, 0.4)",
+          "count": 33,
+          "pred_mean": 0.256,
+          "obs_rate": 0.182
+        },
+        {
+          "bin": "[0.4, 0.6)",
+          "count": 3,
+          "pred_mean": 0.535,
+          "obs_rate": 0.333
+        }
+      ]
+    },
+    "12": {
+      "ece": 0.0198,
+      "table": [
+        {
+          "bin": "[0.0, 0.2)",
+          "count": 1096,
+          "pred_mean": 0.072,
+          "obs_rate": 0.058
+        },
+        {
+          "bin": "[0.2, 0.4)",
+          "count": 108,
+          "pred_mean": 0.284,
+          "obs_rate": 0.222
+        },
+        {
+          "bin": "[0.4, 0.6)",
+          "count": 30,
+          "pred_mean": 0.484,
+          "obs_rate": 0.533
+        },
+        {
+          "bin": "[0.6, 0.8)",
+          "count": 5,
+          "pred_mean": 0.667,
+          "obs_rate": 1.0
+        }
+      ]
+    },
+    "24": {
+      "ece": 0.0221,
+      "table": [
+        {
+          "bin": "[0.0, 0.2)",
+          "count": 739,
+          "pred_mean": 0.069,
+          "obs_rate": 0.081
+        },
+        {
+          "bin": "[0.2, 0.4)",
+          "count": 101,
+          "pred_mean": 0.297,
+          "obs_rate": 0.277
+        },
+        {
+          "bin": "[0.4, 0.6)",
+          "count": 45,
+          "pred_mean": 0.493,
+          "obs_rate": 0.489
+        },
+        {
+          "bin": "[0.6, 0.8)",
+          "count": 33,
+          "pred_mean": 0.698,
+          "obs_rate": 0.455
+        },
+        {
+          "bin": "[0.8, 1.0)",
+          "count": 19,
+          "pred_mean": 0.87,
+          "obs_rate": 0.947
+        }
+      ]
+    }
+  },
+  "gru_results": {
+    "masked_gru": {
+      "val_mae": 1.525,
+      "epochs": 25,
+      "masked": true
+    },
+    "unmasked_gru": {
+      "val_mae": 1.547,
+      "epochs": 25,
+      "masked": false
+    }
+  },
+  "ablations": {
+    "mri_ablation": {
+      "without_mri_mae": 1.465,
+      "with_mri_mae": 1.462,
+      "delta": -0.003
+    },
+    "imputed_baseline": {
+      "note": "Inputs may leak future visit info (imputation computed across subject history).",
+      "imputed_rows": 10399,
+      "subjects": 3034
+    }
+  }
+}

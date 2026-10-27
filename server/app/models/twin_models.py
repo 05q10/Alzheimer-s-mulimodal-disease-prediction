@@ -1,0 +1,233 @@
+"""
+server/app/models/twin_models.py
+=================================
+Pydantic models for all 8 new Digital Twin API routes.
+These are the full production schemas — stubs return fixture data.
+"""
+
+from __future__ import annotations
+from typing import Any, Dict, List, Optional, Literal
+from pydantic import BaseModel, Field
+
+
+# ── Shared leaf models ─────────────────────────────────────────────────────
+
+class StageProbs(BaseModel):
+    CN: float = Field(ge=0, le=1)
+    MCI: float = Field(ge=0, le=1)
+    AD: float = Field(ge=0, le=1)
+
+
+class ForecastPoint(BaseModel):
+    MMSE_mean: Optional[float] = None
+    MMSE_lo: Optional[float] = None     # 5th percentile
+    MMSE_hi: Optional[float] = None     # 95th percentile
+    CDGLOBAL_mean: Optional[float] = None
+    CDGLOBAL_lo: Optional[float] = None
+    CDGLOBAL_hi: Optional[float] = None
+    TOTSCORE_mean: Optional[float] = None
+    TOTSCORE_lo: Optional[float] = None
+    TOTSCORE_hi: Optional[float] = None
+    stage_probs: Optional[StageProbs] = None
+    conversion_prob: Optional[float] = None   # P(stage worsens by horizon)
+
+
+class VisitRecord(BaseModel):
+    month: int = Field(ge=0, description="Months since baseline")
+    MMSE: Optional[float] = Field(None, ge=0, le=30)
+    CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
+    TOTSCORE: Optional[float] = Field(None, ge=0, le=70,
+                                       description="ADAS11-Cog prorated (0-70, higher=worse)")
+    DX_obs: Optional[int] = Field(None, ge=1, le=3,
+                                   description="Observed DX at this visit (1=CN,2=MCI,3=AD); null if unknown")
+    source: Literal["user", "adni", "synthetic"] = "user"
+
+
+class ModalityStatus(BaseModel):
+    present: bool = False
+    latest: Optional[Dict[str, Any]] = None
+
+
+class TwinState(BaseModel):
+    stage_probs: StageProbs
+    stage: Literal["CN", "MCI", "AD"]
+    confidence: float = Field(ge=0, le=1)
+    tier_used: Literal["T1", "T1a", "T1b", "T2a", "T2b", "T2", "T3", "T4"]
+    forecast: Dict[str, ForecastPoint] = Field(
+        default_factory=dict,
+        description="Keys: '6', '12', '24' (months)"
+    )
+    conversion_risk: Dict[str, float] = Field(
+        default_factory=lambda: {"12m": 0.0, "24m": 0.0},
+        description="Probability of converting to a worse stage"
+    )
+    rate_of_decline: Optional[Dict[str, Any]] = None
+    shap_drivers: Optional[List[Dict[str, Any]]] = None
+
+
+class HistoryEvent(BaseModel):
+    timestamp: str
+    stage_probs: StageProbs
+    event: str   # e.g. "visit_added", "modality_attached", "twin_created"
+    prob_diff: Optional[Dict[str, float]] = None
+
+
+class TwinFull(BaseModel):
+    twin_id: str
+    name: Optional[str] = None
+    is_synthetic: bool
+    persona_label: Optional[str] = None     # e.g. "CN→MCI Converter"
+    demographics: Dict[str, Any]
+    modalities: Dict[str, ModalityStatus]
+    visits: List[VisitRecord]
+    state: TwinState
+    history: List[HistoryEvent]
+
+
+# ── Request / Input models ──────────────────────────────────────────────────
+
+class DemographicsInput(BaseModel):
+    age: float = Field(ge=18, le=110)
+    sex: Literal[0, 1] = Field(description="0=Male, 1=Female")
+    education_years: float = Field(ge=0, le=30)
+    apoe4: Optional[int] = Field(None, ge=0, le=2, description="Alias for apoe4_count")
+    apoe4_count: Optional[int] = Field(None, ge=0, le=2)
+
+
+class ScoresInput(BaseModel):
+    MMSE: Optional[float] = Field(None, ge=0, le=30)
+    CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
+    TOTSCORE: Optional[float] = Field(None, ge=0, le=70)
+    CDRSB: Optional[float] = Field(None, ge=0, le=18)
+    FAQ: Optional[float] = Field(None, ge=0, le=30)
+    MOCA: Optional[float] = Field(None, ge=0, le=30)
+
+
+class BiomarkersPayload(BaseModel):
+    ABETA: Optional[float] = None
+    TAU: Optional[float] = None
+    PTAU: Optional[float] = None
+    APVOLUME: Optional[float] = None
+    GENOTYPE: Optional[str] = None
+    FDG: Optional[float] = None
+
+
+class MRIVolumesPayload(BaseModel):
+    hippocampus: Optional[float] = None
+    hippocampus_left: Optional[float] = None
+    hippocampus_right: Optional[float] = None
+    entorhinal: Optional[float] = None
+    entorhinal_left: Optional[float] = None
+    entorhinal_right: Optional[float] = None
+    ventricles: Optional[float] = None
+    whole_brain: Optional[float] = None
+    icv: Optional[float] = None
+
+
+class CreateTwinRequest(BaseModel):
+    """POST /twin — supports both patient-builder nested shape and flat legacy shape."""
+    name: Optional[str] = None
+
+    # Patient-builder nested structures
+    demographics: Optional[DemographicsInput] = None
+    scores: Optional[ScoresInput] = None
+    biomarkers: Optional[BiomarkersPayload] = None
+    mri_volumes: Optional[MRIVolumesPayload] = None
+    lifestyle: Optional[Dict[str, Any]] = None
+    visits: Optional[List[VisitRecord]] = None
+
+    # Flat fields (backward compatibility with Phase 1-3 callers)
+    age: Optional[float] = Field(None, ge=18, le=110)
+    sex: Optional[Literal[0, 1]] = None
+    education_years: Optional[float] = Field(None, ge=0, le=30)
+    apoe4_count: Optional[int] = Field(None, ge=0, le=2)
+    MMSE: Optional[float] = Field(None, ge=0, le=30)
+    CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
+    TOTSCORE: Optional[float] = Field(None, ge=0, le=70)
+    CDRSB: Optional[float] = Field(None, ge=0, le=18)
+    MOCA: Optional[float] = Field(None, ge=0, le=30)
+    FAQ: Optional[float] = Field(None, ge=0, le=30)
+    ABETA: Optional[float] = None
+    TAU: Optional[float] = None
+    PTAU: Optional[float] = None
+    initial_visits: Optional[List[VisitRecord]] = None
+    is_synthetic: bool = False
+    persona_label: Optional[str] = None
+
+
+class AddVisitRequest(BaseModel):
+    """POST /twin/{id}/visit"""
+    month: int = Field(ge=0)
+    MMSE: Optional[float] = Field(None, ge=0, le=30)
+    CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
+    TOTSCORE: Optional[float] = Field(None, ge=0, le=70)
+    DX_obs: Optional[int] = Field(None, ge=1, le=3)
+    source: Literal["user", "adni", "synthetic"] = "user"
+
+
+class AddVisitResponse(BaseModel):
+    twin_id: str
+    state: TwinState
+    prob_diff: Dict[str, float]   # new_prob - old_prob per class
+
+
+class ScenarioRequest(BaseModel):
+    """POST /twin/{id}/scenario"""
+    horizon_months: int
+    hypothetical_visit: Optional[Dict[str, Optional[float]]] = None
+    biomarkers: Optional[BiomarkersPayload] = None
+    mri_volumes: Optional[MRIVolumesPayload] = None
+    decline_multiplier: Optional[float] = 1.0
+
+
+class ScenarioResponse(BaseModel):
+    twin_id: str
+    horizon_months: int
+    baseline: Dict[str, Any]
+    scenario: Dict[str, Any]
+    delta: Dict[str, Any]
+    scope_warnings: List[str]
+    disclaimer: str = (
+        "Hypothetical what-if scenario. Projections represent counterfactual simulations "
+        "and are NOT clinical predictions. Model uncertainty and biological variability apply."
+    )
+
+
+class SimulateRequest(BaseModel):
+    """POST /twin/{id}/simulate"""
+    decline_multiplier: float = Field(
+        ge=0.25, le=3.0,
+        description="1.0 = as predicted. 0.5 = half speed decline. 1.5 = 50% faster."
+    )
+
+
+class SimulateResponse(BaseModel):
+    twin_id: str
+    decline_multiplier: float
+    simulated_forecast: Dict[str, ForecastPoint]
+    disclaimer: str = (
+        "Illustrative simulation only. Trajectory is scaled from the model's "
+        "central prediction by the chosen multiplier. This is NOT a clinical "
+        "prediction and does not account for individual biological variability, "
+        "treatment effects, or model uncertainty beyond the shown bands."
+    )
+
+
+class DemoPatientEntry(BaseModel):
+    twin_id: str
+    persona_label: str
+    is_synthetic: bool
+    baseline_stage: Literal["CN", "MCI", "AD"]
+    trajectory: str   # e.g. "Stable CN", "CN→MCI", "Fast MCI→AD"
+    n_visits: int
+
+
+class ModelCardMetrics(BaseModel):
+    """GET /model-card"""
+    stager: Dict[str, Any]
+    progression: Dict[str, Any]
+    scope: Dict[str, Any]
+    limitations: List[str]
+    resnet_disclaimer: str
+    fusion_disclaimer: str
+    data_provenance: Dict[str, Any]

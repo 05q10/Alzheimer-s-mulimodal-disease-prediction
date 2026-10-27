@@ -1,0 +1,95 @@
+[
+    {
+        "demographics": {
+            "patient_id": "5",
+            "age": 73.7,
+            "sex": "Male"
+        },
+        "clinical_evaluation": {
+            "mmse_score": 29.0,
+            "catboost_risk_probability": null
+        },
+        "mri_analysis": {
+            "apvolume": 10.0,
+            "derived_severity_stage": 0,
+            "image_model_prediction": "Simulated output due to env constraint"
+        },
+        "biomarkers": {
+            "abeta": 547.3,
+            "tau": 337.0,
+            "apoe_genotype": "0.0"
+        },
+        "ocr_extracted": {
+            "status": "Simulated successful extraction matching biomarker fields."
+        },
+        "fused_diagnosis": {
+            "ensemble_predicted_class": "MCI",
+            "biomarker_risk": 0.494,
+            "unified_risk_score": 0.346,
+            "ground_truth_label": "CN"
+        },
+        "temporal_history": []
+    },
+    {
+        "demographics": {
+            "patient_id": "4",
+            "age": 67.5,
+            "sex": "Male"
+        },
+        "clinical_evaluation": {
+            "mmse_score": 27.0,
+            "catboost_risk_probability": null
+        },
+        "mri_analysis": {
+            "apvolume": 9.2,
+            "derived_severity_stage": 1,
+            "image_model_prediction": "Simulated output due to env constraint"
+        },
+        "biomarkers": {
+            "abeta": 1501.0,
+            "tau": 153.1,
+            "apoe_genotype": "0.0"
+        },
+        "ocr_extracted": {
+            "status": "Simulated successful extraction matching biomarker fields."
+        },
+        "fused_diagnosis": {
+            "ensemble_predicted_class": "CN",
+            "biomarker_risk": 0.19,
+            "unified_risk_score": 0.233,
+            "ground_truth_label": "MCI"
+        },
+        "temporal_history": []
+    },
+    {
+        "demographics": {
+            "patient_id": "10",
+            "age": 73.9,
+            "sex": "Female"
+        },
+        "clinical_evaluation": {
+            "mmse_score": 24.0,
+            "catboost_risk_probability": null
+        },
+        "mri_analysis": {
+            "apvolume": 9.0,
+            "derived_severity_stage": 1,
+            "image_model_prediction": "Simulated output due to env constraint"
+        },
+        "biomarkers": {
+            "abeta": 357.4,
+            "tau": 329.9,
+            "apoe_genotype": "1.0"
+        },
+        "ocr_extracted": {
+            "status": "Simulated successful extraction matching biomarker fields."
+        },
+        "fused_diagnosis": {
+            "ensemble_predicted_class": "Dementia",
+            "biomarker_risk": 0.79,
+            "unified_risk_score": 0.653,
+            "ground_truth_label": "Dementia"
+        },
+        "temporal_history": []
+    }
+]

@@ -1,0 +1,14 @@
+{
+    "Exact Match": {
+        "count": 10,
+        "percentage": 83.3
+    },
+    "Missed": {
+        "count": 1,
+        "percentage": 8.3
+    },
+    "Fuzzy Match": {
+        "count": 1,
+        "percentage": 8.3
+    }
+}

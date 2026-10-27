@@ -10,6 +10,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+catboost_info/
 develop-eggs/
 .eggs/
 MANIFEST
@@ -102,3 +103,34 @@ temp/
 .cache/
 *.tmp
 *.bak
+
+# ================================
+# ADNI / Research Data Protection
+# (ADNI data is restricted and must never be committed to git)
+# ================================
+
+# Raw ADNI CSV files
+server/data/*.csv
+server/data/**/*.csv
+
+# Processed ADNI data
+server/data/*.parquet
+server/data/*.feather
+server/data/splits.json
+
+# Digital Twin patient files (may contain real de-identified ADNI data)
+server/data/twins/
+!server/data/twins/.gitkeep
+
+# Copies of ADNI data in ml subdirectories
+server/ml/alele_model/ADNIMERGE*.csv
+server/ml/alele_model/All_Subjects*.csv
+
+# Experiment results that may contain patient-level data
+# (keep summary MDs and figures, not raw result CSVs)
+server/experiments/results/*.csv
+server/experiments/results/*.parquet
+
+# Allow non-patient result files
+!server/experiments/results/*.md
+!server/experiments/figures/

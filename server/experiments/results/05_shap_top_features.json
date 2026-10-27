@@ -1,0 +1,80 @@
+{
+    "clinical_catboost_top10": [
+        {
+            "feature": "FunctionalAssessment",
+            "shap_value": 0.7433960915555741
+        },
+        {
+            "feature": "ADL",
+            "shap_value": 0.6704279305558133
+        },
+        {
+            "feature": "MemoryComplaints",
+            "shap_value": 0.5027771109330996
+        },
+        {
+            "feature": "MMSE",
+            "shap_value": 0.4490287227890534
+        },
+        {
+            "feature": "BehavioralProblems",
+            "shap_value": 0.3696710147944161
+        },
+        {
+            "feature": "CholesterolHDL",
+            "shap_value": 0.007408714532592294
+        },
+        {
+            "feature": "Age",
+            "shap_value": 0.007342590568027366
+        },
+        {
+            "feature": "Gender",
+            "shap_value": 0.006362972620815703
+        },
+        {
+            "feature": "CholesterolLDL",
+            "shap_value": 0.005424838329876482
+        },
+        {
+            "feature": "SystolicBP",
+            "shap_value": 0.005234737105709305
+        }
+    ],
+    "biomarker_xgboost_top10": [
+        {
+            "feature": "ABETA",
+            "shap_value": 0.31983307003974915
+        },
+        {
+            "feature": "GENOTYPE_2_4",
+            "shap_value": 0.08674953132867813
+        },
+        {
+            "feature": "MMSE",
+            "shap_value": 0.08018507808446884
+        },
+        {
+            "feature": "APVOLUME",
+            "shap_value": 0.068559929728508
+        },
+        {
+            "feature": "GENOTYPE_2_3",
+            "shap_value": 0.06661085784435272
+        },
+        {
+            "feature": "ABETA_TAU_RATIO",
+            "shap_value": 0.06315731257200241
+        },
+        {
+            "feature": "TAU",
+            "shap_value": 0.052578821778297424
+        },
+        {
+            "feature": "MMSE_TAU_INTERACT",
+            "shap_value": 0.037828266620635986
+        }
+    ],
+    "model_source": "Loaded original model (0.9558 acc) - SHAP uses real holdout data",
+    "generated_at": "2026-09-07T00:00:43.012037"
+}

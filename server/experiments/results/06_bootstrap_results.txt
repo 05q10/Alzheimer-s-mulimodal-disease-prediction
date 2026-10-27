@@ -1,0 +1,7 @@
+--- Biomarker Ensemble ---
+Accuracy: 0.481 [95% CI: 0.435 - 0.526]
+F1 Score: 0.444 [95% CI: 0.394 - 0.494]
+
+--- Clinical CatBoost ---
+Accuracy: 0.956 [95% CI: 0.935 - 0.972]
+F1 Score: 0.956 [95% CI: 0.935 - 0.972]
