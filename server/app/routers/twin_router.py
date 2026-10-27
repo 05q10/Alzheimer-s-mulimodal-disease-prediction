@@ -223,6 +223,8 @@ def get_model_card():
             "ResNet MRI model was trained on a Kaggle dataset (not ADNI). Its 99.7% accuracy is inflated and not validated on ADNI.",
             "Simulation multipliers are illustrative mathematical scalings; they do not predict pharmacological response.",
             "Not for direct diagnostic or treatment decision-making without specialist neurological consultation.",
+            "CSF biomarker findings (preclinical AD amyloid/tau plateauing): possible explanation, not tested in this observational analysis.",
+            "MRI volumetric findings (clarifying borderline MCI vs mild AD): possible explanation, not tested in this observational analysis.",
         ],
         resnet_disclaimer=(
             "The ResNet-50 MRI model was trained on a non-ADNI Kaggle Alzheimer's dataset. "

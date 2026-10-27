@@ -1,92 +1,135 @@
 {
   "primary_model": "GBM",
-  "ship_reason": "GBM (MAE=1.465) is primary production model. GRU Val MAE was 1.525.",
+  "ship_reason": "GBM (Val MAE=1.549, Test MAE=1.465) is primary production model. Masked GRU achieved Val MAE=1.536, Test MAE=1.475.",
   "results": {
     "6": {
       "horizon": 6,
+      "MMSE_n_anchors_test": 755,
+      "MMSE_n_subjects_test": 225,
+      "MMSE_val_mae": 1.536,
       "MMSE_mae": 1.385,
       "MMSE_mae_ci": "[1.261, 1.513]",
       "MMSE_pers_mae": 1.425,
       "MMSE_slope_mae": 1.781,
       "MMSE_beats_pers": true,
       "MMSE_beats_slope": true,
+      "CDGLOBAL_n_anchors_test": 748,
+      "CDGLOBAL_n_subjects_test": 225,
+      "CDGLOBAL_val_mae": 0.078,
       "CDGLOBAL_mae": 0.064,
       "CDGLOBAL_mae_ci": "[0.049, 0.08]",
       "CDGLOBAL_pers_mae": 0.061,
       "CDGLOBAL_slope_mae": 0.08,
       "CDGLOBAL_beats_pers": false,
       "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_n_anchors_test": 527,
+      "TOTSCORE_n_subjects_test": 225,
+      "TOTSCORE_val_mae": 2.938,
       "TOTSCORE_mae": 2.841,
       "TOTSCORE_mae_ci": "[2.609, 3.075]",
       "TOTSCORE_pers_mae": 2.928,
       "TOTSCORE_slope_mae": 3.972,
       "TOTSCORE_beats_pers": true,
       "TOTSCORE_beats_slope": true,
+      "conversion_n_anchors": 864,
+      "conversion_n_subjects": 195,
       "conversion_auroc": 0.6239,
       "conversion_auroc_ci": "[0.5357, 0.7087]",
       "conversion_baseline_auroc": 0.6536,
       "conversion_baseline_ci": "[0.5734, 0.7354]",
       "conversion_ece": 0.0111,
+      "conversion_brier": 0.05,
+      "conversion_bss": 0.0089,
       "n_reversions": 50
     },
     "12": {
       "horizon": 12,
+      "MMSE_n_anchors_test": 1135,
+      "MMSE_n_subjects_test": 266,
+      "MMSE_val_mae": 1.549,
       "MMSE_mae": 1.465,
       "MMSE_mae_ci": "[1.354, 1.581]",
       "MMSE_pers_mae": 1.603,
       "MMSE_slope_mae": 2.108,
       "MMSE_beats_pers": true,
       "MMSE_beats_slope": true,
+      "CDGLOBAL_n_anchors_test": 1140,
+      "CDGLOBAL_n_subjects_test": 271,
+      "CDGLOBAL_val_mae": 0.119,
       "CDGLOBAL_mae": 0.113,
       "CDGLOBAL_mae_ci": "[0.097, 0.13]",
       "CDGLOBAL_pers_mae": 0.112,
       "CDGLOBAL_slope_mae": 0.139,
       "CDGLOBAL_beats_pers": false,
       "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_n_anchors_test": 872,
+      "TOTSCORE_n_subjects_test": 265,
+      "TOTSCORE_val_mae": 3.055,
       "TOTSCORE_mae": 2.903,
       "TOTSCORE_mae_ci": "[2.691, 3.149]",
       "TOTSCORE_pers_mae": 3.224,
       "TOTSCORE_slope_mae": 4.828,
       "TOTSCORE_beats_pers": true,
       "TOTSCORE_beats_slope": true,
+      "conversion_n_anchors": 1239,
+      "conversion_n_subjects": 277,
       "conversion_auroc": 0.7615,
       "conversion_auroc_ci": "[0.7031, 0.8188]",
       "conversion_baseline_auroc": 0.7013,
       "conversion_baseline_ci": "[0.6389, 0.7618]",
       "conversion_ece": 0.0198,
+      "conversion_brier": 0.0692,
+      "conversion_bss": 0.1379,
       "n_reversions": 59
     },
     "24": {
       "horizon": 24,
+      "MMSE_n_anchors_test": 880,
+      "MMSE_n_subjects_test": 223,
+      "MMSE_val_mae": 1.705,
       "MMSE_mae": 1.56,
       "MMSE_mae_ci": "[1.403, 1.725]",
       "MMSE_pers_mae": 1.739,
       "MMSE_slope_mae": 2.408,
       "MMSE_beats_pers": true,
       "MMSE_beats_slope": true,
+      "CDGLOBAL_n_anchors_test": 887,
+      "CDGLOBAL_n_subjects_test": 233,
+      "CDGLOBAL_val_mae": 0.164,
       "CDGLOBAL_mae": 0.138,
       "CDGLOBAL_mae_ci": "[0.115, 0.165]",
       "CDGLOBAL_pers_mae": 0.152,
       "CDGLOBAL_slope_mae": 0.187,
       "CDGLOBAL_beats_pers": true,
       "CDGLOBAL_beats_slope": true,
+      "TOTSCORE_n_anchors_test": 664,
+      "TOTSCORE_n_subjects_test": 220,
+      "TOTSCORE_val_mae": 3.446,
       "TOTSCORE_mae": 3.12,
       "TOTSCORE_mae_ci": "[2.824, 3.441]",
       "TOTSCORE_pers_mae": 3.665,
       "TOTSCORE_slope_mae": 6.253,
       "TOTSCORE_beats_pers": true,
       "TOTSCORE_beats_slope": true,
+      "conversion_n_anchors": 937,
+      "conversion_n_subjects": 217,
       "conversion_auroc": 0.8111,
       "conversion_auroc_ci": "[0.7564, 0.8611]",
       "conversion_baseline_auroc": 0.7291,
       "conversion_baseline_ci": "[0.668, 0.7889]",
       "conversion_ece": 0.0221,
+      "conversion_brier": 0.1023,
+      "conversion_bss": 0.2088,
       "n_reversions": 50
     }
   },
   "calibrations": {
     "6": {
       "ece": 0.0111,
+      "brier": 0.05,
+      "brier_ref": 0.0504,
+      "bss": 0.0089,
+      "base_rate": 0.0532,
       "table": [
         {
           "bin": "[0.0, 0.2)",
@@ -110,6 +153,10 @@
     },
     "12": {
       "ece": 0.0198,
+      "brier": 0.0692,
+      "brier_ref": 0.0802,
+      "bss": 0.1379,
+      "base_rate": 0.088,
       "table": [
         {
           "bin": "[0.0, 0.2)",
@@ -139,6 +186,10 @@
     },
     "24": {
       "ece": 0.0221,
+      "brier": 0.1023,
+      "brier_ref": 0.1293,
+      "bss": 0.2088,
+      "base_rate": 0.1526,
       "table": [
         {
           "bin": "[0.0, 0.2)",
@@ -175,24 +226,33 @@
   },
   "gru_results": {
     "masked_gru": {
-      "val_mae": 1.525,
-      "epochs": 25,
-      "masked": true
+      "val_mae": 1.536,
+      "test_mae": 1.475,
+      "epochs": 25
     },
     "unmasked_gru": {
-      "val_mae": 1.547,
-      "epochs": 25,
-      "masked": false
+      "val_mae": 1.569,
+      "test_mae": 1.52,
+      "epochs": 25
+    },
+    "difference": {
+      "delta_mae": -0.045,
+      "delta_mae_ci": "[-0.0814, -0.0115]",
+      "spans_zero": false
     }
   },
   "ablations": {
     "mri_ablation": {
-      "without_mri_mae": 1.465,
+      "n_anchors": 1143,
+      "n_subjects": 267,
+      "without_mri_mae": 1.474,
       "with_mri_mae": 1.462,
-      "delta": -0.003
+      "delta_mae": -0.0122,
+      "delta_mae_ci": "[-0.0425, 0.0193]",
+      "spans_zero": true
     },
     "imputed_baseline": {
-      "note": "Inputs may leak future visit info (imputation computed across subject history).",
+      "note": "Inputs may leak future visit info (imputation computed across subject history). External baseline only.",
       "imputed_rows": 10399,
       "subjects": 3034
     }

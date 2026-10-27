@@ -108,6 +108,34 @@
       "ABETA_censored",
       "TAU_censored"
     ],
+    "T2b_MRI": [
+      "entry_age",
+      "sex",
+      "education_years",
+      "apoe4_count",
+      "MMSE",
+      "CDGLOBAL",
+      "CDRSB",
+      "FAQTOTAL",
+      "TOTSCORE",
+      "MOCA",
+      "hippo_combined_norm",
+      "hippo_asymmetry",
+      "lh_entorhinal_thickness",
+      "rh_entorhinal_thickness",
+      "lh_amygdala_norm",
+      "rh_amygdala_norm",
+      "lateral_ventricle_combined_norm",
+      "whole_brain_norm",
+      "lh_midtemporal_thickness",
+      "rh_midtemporal_thickness",
+      "lh_fusiform_thickness",
+      "rh_fusiform_thickness",
+      "lh_precuneus_thickness",
+      "rh_precuneus_thickness",
+      "mri_obs",
+      "mri_gap_months"
+    ],
     "T4": [
       "entry_age",
       "sex",
@@ -141,5 +169,319 @@
       "mri_obs",
       "mri_gap_months"
     ]
+  },
+  "tier_results": {
+    "T1": {
+      "tier": "T1",
+      "n_rows": 3022,
+      "accuracy": 0.5408,
+      "macro_f1": 0.4485,
+      "f1_95ci": "[0.4079, 0.4859]",
+      "balanced_acc": 0.3333,
+      "ece": 0.0521,
+      "mean_entropy": 0.9427,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.3954334877564527,
+          "recall": 1.0,
+          "f1-score": 0.5667536163149158,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 590.0
+        },
+        "accuracy": 0.3954334877564527,
+        "macro avg": {
+          "precision": 0.13181116258548423,
+          "recall": 0.3333333333333333,
+          "f1-score": 0.18891787210497193,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.15636764323923263,
+          "recall": 0.3954334877564527,
+          "f1-score": 0.22411335919798955,
+          "support": 3022.0
+        }
+      }
+    },
+    "T1b": {
+      "tier": "T1b",
+      "n_rows": 3022,
+      "accuracy": 0.6865,
+      "macro_f1": 0.6558,
+      "f1_95ci": "[0.6225, 0.6894]",
+      "balanced_acc": 0.3333,
+      "ece": 0.0384,
+      "mean_entropy": 0.7093,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.3954334877564527,
+          "recall": 1.0,
+          "f1-score": 0.5667536163149158,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 590.0
+        },
+        "accuracy": 0.3954334877564527,
+        "macro avg": {
+          "precision": 0.13181116258548423,
+          "recall": 0.3333333333333333,
+          "f1-score": 0.18891787210497193,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.15636764323923263,
+          "recall": 0.3954334877564527,
+          "f1-score": 0.22411335919798955,
+          "support": 3022.0
+        }
+      }
+    },
+    "T2a": {
+      "tier": "T2a",
+      "n_rows": 3022,
+      "accuracy": 0.7895,
+      "macro_f1": 0.7712,
+      "f1_95ci": "[0.7424, 0.7997]",
+      "balanced_acc": 0.7335,
+      "ece": 0.0241,
+      "mean_entropy": 0.5694,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.7106089139987445,
+          "recall": 0.9472803347280335,
+          "f1-score": 0.812051649928264,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.8185219831618334,
+          "recall": 0.7073565076798707,
+          "f1-score": 0.7588898525585429,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.8944444444444445,
+          "recall": 0.5457627118644067,
+          "f1-score": 0.6778947368421052,
+          "support": 590.0
+        },
+        "accuracy": 0.7706816677696889,
+        "macro avg": {
+          "precision": 0.8078584472016742,
+          "recall": 0.7334665180907703,
+          "f1-score": 0.7496120797763041,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.7906722593057279,
+          "recall": 0.7706816677696889,
+          "f1-score": 0.7640987306472651,
+          "support": 3022.0
+        }
+      }
+    },
+    "T2b": {
+      "tier": "T2b",
+      "n_rows": 3022,
+      "accuracy": 0.8042,
+      "macro_f1": 0.7876,
+      "f1_95ci": "[0.7588, 0.8166]",
+      "balanced_acc": 0.7421,
+      "ece": 0.0206,
+      "mean_entropy": 0.5348,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.7141955835962145,
+          "recall": 0.9472803347280335,
+          "f1-score": 0.814388489208633,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.8277511961722488,
+          "recall": 0.6992724333063864,
+          "f1-score": 0.7581069237510956,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.8724489795918368,
+          "recall": 0.5796610169491525,
+          "f1-score": 0.6965376782077393,
+          "support": 590.0
+        },
+        "accuracy": 0.7739907346128392,
+        "macro avg": {
+          "precision": 0.8047985864534334,
+          "recall": 0.7420712616611908,
+          "f1-score": 0.7563443637224893,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.7915740734684751,
+          "recall": 0.7739907346128392,
+          "f1-score": 0.7683420712862303,
+          "support": 3022.0
+        }
+      }
+    },
+    "T3": {
+      "tier": "T3",
+      "n_rows": 3022,
+      "accuracy": 0.8021,
+      "macro_f1": 0.7854,
+      "f1_95ci": "[0.7562, 0.8139]",
+      "balanced_acc": 0.7524,
+      "ece": 0.0191,
+      "mean_entropy": 0.5412,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.7460426703372333,
+          "recall": 0.907112970711297,
+          "f1-score": 0.8187311178247734,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.8325312800769971,
+          "recall": 0.6992724333063864,
+          "f1-score": 0.7601054481546573,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.7245283018867924,
+          "recall": 0.6508474576271186,
+          "f1-score": 0.6857142857142857,
+          "support": 590.0
+        },
+        "accuracy": 0.772005294506949,
+        "macro avg": {
+          "precision": 0.7677007507670076,
+          "recall": 0.7524109538816006,
+          "f1-score": 0.7548502838979054,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.7772448321050451,
+          "recall": 0.772005294506949,
+          "f1-score": 0.7687642467701337,
+          "support": 3022.0
+        }
+      }
+    },
+    "T4": {
+      "tier": "T4",
+      "n_rows": 3022,
+      "accuracy": 0.8108,
+      "macro_f1": 0.7964,
+      "f1_95ci": "[0.7694, 0.8239]",
+      "balanced_acc": 0.7708,
+      "ece": 0.0192,
+      "mean_entropy": 0.5186,
+      "trivial_macro_f1": 0.1936,
+      "beats_trivial": true,
+      "per_class": {
+        "CN": {
+          "precision": 0.8053097345132744,
+          "recall": 0.8376569037656904,
+          "f1-score": 0.8211648892534865,
+          "support": 1195.0
+        },
+        "MCI": {
+          "precision": 0.7844756399669695,
+          "recall": 0.7679870654810024,
+          "f1-score": 0.7761437908496732,
+          "support": 1237.0
+        },
+        "AD": {
+          "precision": 0.7341549295774648,
+          "recall": 0.7067796610169491,
+          "f1-score": 0.7202072538860104,
+          "support": 590.0
+        },
+        "accuracy": 0.7835870284579749,
+        "macro avg": {
+          "precision": 0.774646768019236,
+          "recall": 0.7708078767545473,
+          "f1-score": 0.7725053113297234,
+          "support": 3022.0
+        },
+        "weighted avg": {
+          "precision": 0.7828897775755157,
+          "recall": 0.7835870284579749,
+          "f1-score": 0.7830258741666805,
+          "support": 3022.0
+        }
+      }
+    }
+  },
+  "paired_results": {
+    "csf": {
+      "n_rows": 486,
+      "n_subjects": 178,
+      "f1_t2b": 0.8415,
+      "f1_t3": 0.855,
+      "delta_f1": 0.0135,
+      "delta_f1_ci": "[-0.0009, 0.032]",
+      "entropy_t2b": 0.3897,
+      "entropy_t3": 0.433,
+      "delta_entropy": 0.0432,
+      "delta_entropy_ci": "[0.0385, 0.0475]"
+    },
+    "mri_isolated": {
+      "n_rows": 1996,
+      "n_subjects": 344,
+      "f1_t2b": 0.7873,
+      "f1_t2b_mri": 0.8074,
+      "delta_f1": 0.0201,
+      "delta_f1_ci": "[0.0014, 0.0396]",
+      "entropy_t2b": 0.4678,
+      "entropy_t2b_mri": 0.487,
+      "delta_entropy": 0.0192,
+      "delta_entropy_ci": "[0.0156, 0.0232]"
+    },
+    "mri": {
+      "n_rows": 1996,
+      "n_subjects": 344,
+      "f1_t2b": 0.7873,
+      "f1_t4": 0.814,
+      "delta_f1": 0.0267,
+      "delta_f1_ci": "[0.008, 0.046]",
+      "entropy_t2b": 0.4678,
+      "entropy_t4": 0.4853,
+      "delta_entropy": 0.0175,
+      "delta_entropy_ci": "[0.0134, 0.0217]"
+    }
+  },
+  "clinical_notes": {
+    "csf_incremental_value": "On exact matched test rows (N=486), Delta Macro-F1 was +0.0135 with 95% CI spanning zero [-0.0009, 0.0320]. Possible explanation, not tested: preclinical amyloid and tau alterations frequently occur in cognitively normal individuals and can plateau prior to dementia onset.",
+    "mri_isolated_value": "On exact matched test rows (N=1,996), Delta Macro-F1 for T2b+MRI (no CSF) vs T2b was +0.0201 (95% CI: [0.0014, 0.0396]). Possible explanation, not tested: macroscopic hippocampal and entorhinal atrophy may provide objective anatomical confirmation in borderline MCI vs early AD cases where functional test scores alone are ambiguous."
   }
 }
