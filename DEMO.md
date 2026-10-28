@@ -33,6 +33,8 @@ python -m pytest tests/ -v
 Expected output:
 - `tests/test_no_leakage.py`: 10/10 passed (zero leakage, temporal integrity)
 - `tests/test_twin_api.py`: 7/7 passed (patient-builder, scenario, undo/reset, model card scope)
+- `tests/test_part1_part2.py`: 3/3 passed (MRI upload, tempered ResNet softmax, reset/undo snapshot, real dates)
+- `tests/test_plausibility.py`: 7/7 passed (archetypes CN, MCI, Mild AD, Moderate AD, monotonicity, scenario multipliers)
 - `tests/test_legacy_routes.py`: 5/5 passed (/alele, /image, /extract-report, /base, /lstm-predict)
 
 ---

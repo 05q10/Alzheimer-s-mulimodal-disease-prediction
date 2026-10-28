@@ -33,7 +33,9 @@ class TwinProgression:
     def __init__(self):
         self._loaded = False
         self.models_reg: Dict[str, CatBoostRegressor] = {}
+        self.models_delta: Dict[str, CatBoostRegressor] = {}
         self.models_conv: Dict[int, CatBoostClassifier] = {}
+        self.envelope: Dict[str, Any] = {}
         self.meta: Dict[str, Any] = {}
 
     def load(self) -> "TwinProgression":
@@ -42,13 +44,26 @@ class TwinProgression:
             with open(meta_path) as f:
                 self.meta = json.load(f)
 
+        env_path = WEIGHTS_DIR / "plausibility_envelope.json"
+        if env_path.exists():
+            with open(env_path) as f:
+                self.envelope = json.load(f)
+
         for h in HORIZONS:
             for target in ["MMSE", "CDGLOBAL", "TOTSCORE"]:
+                # Level model
                 path = WEIGHTS_DIR / f"progression_gbm_{target}_{h}m.cbm"
                 if path.exists():
                     reg = CatBoostRegressor()
                     reg.load_model(str(path))
                     self.models_reg[f"{target}_{h}m"] = reg
+
+                # Change / Delta model
+                delta_path = WEIGHTS_DIR / f"progression_gbm_delta_{target}_{h}m.cbm"
+                if delta_path.exists():
+                    d_reg = CatBoostRegressor()
+                    d_reg.load_model(str(delta_path))
+                    self.models_delta[f"{target}_{h}m"] = d_reg
 
             conv_path = WEIGHTS_DIR / f"progression_gbm_conv_{h}m.cbm"
             if conv_path.exists():
@@ -77,35 +92,180 @@ class TwinProgression:
             self.load()
 
         X = self._prepare_features(current_visit)
-        forecast = {}
+        forecast: Dict[str, Any] = {}
 
         curr_mmse = float(current_visit.get("MMSE", current_visit.get("MMSCORE", 27)))
         curr_cdg = float(current_visit.get("CDGLOBAL", 0.5))
         curr_tot = float(current_visit.get("TOTSCORE", 12.0))
 
+        # Determine patient stage for envelope matching
+        if current_probs:
+            anchor_stage = max(current_probs, key=current_probs.get)
+        else:
+            if curr_mmse >= 28.0 and curr_cdg == 0.0:
+                anchor_stage = "CN"
+            elif curr_mmse <= 20.0 or curr_cdg >= 1.0:
+                anchor_stage = "AD"
+            else:
+                anchor_stage = "MCI"
+
+        # Check training ranges (5th-95th percentiles of training anchors)
+        training_ranges = self.envelope.get("training_input_ranges", {
+            "age": [60.7, 84.7],
+            "MMSE": [20.0, 30.0],
+            "CDGLOBAL": [0.0, 1.0],
+            "TOTSCORE": [2.3, 26.3],
+            "FAQTOTAL": [0.0, 24.0],
+        })
+
+        scope_warnings: List[str] = []
+        any_input_out_of_range = False
+
+        # Input range checks
+        for key, rng in training_ranges.items():
+            lo, hi = rng
+            val = None
+            if key == "age":
+                val = current_visit.get("age", current_visit.get("entry_age"))
+            else:
+                val = current_visit.get(key, current_visit.get(key.lower()))
+                if val is None and key == "MMSE":
+                    val = current_visit.get("MMSCORE")
+                elif val is None and key == "FAQTOTAL":
+                    val = current_visit.get("FAQ")
+
+            if val is not None and not pd.isna(val):
+                fval = float(val)
+                if fval < lo or fval > hi:
+                    any_input_out_of_range = True
+                    scope_warnings.append(
+                        f"Input {key} ({fval}) is outside the 5th-95th percentile training range [{lo}, {hi}]."
+                    )
+
+        # Discordance check between MMSE and CDR
+        if curr_mmse >= 28.0 and curr_cdg >= 1.0:
+            scope_warnings.append(
+                f"Discordant clinical measures: MMSE {curr_mmse} indicates normal cognition while CDR {curr_cdg} indicates dementia."
+            )
+        elif curr_mmse <= 18.0 and curr_cdg == 0.0:
+            scope_warnings.append(
+                f"Discordant clinical measures: MMSE {curr_mmse} indicates severe impairment while CDR {curr_cdg} indicates normal cognition."
+            )
+
+        any_unreliable = any_input_out_of_range
+
         for h in HORIZONS:
-            # MMSE
-            mmse_model = self.models_reg.get(f"MMSE_{h}m")
-            mmse_pred = float(mmse_model.predict(X)[0]) if mmse_model else curr_mmse
-            mmse_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("MMSE", 1.5)
+            env_h = self.envelope.get("horizons", {}).get(str(h), {})
+
+            # ── 1. MMSE ───────────────────────────────────────────────────
+            mmse_env = env_h.get("MMSE", {}).get("by_stage", {}).get(anchor_stage, env_h.get("MMSE", {}).get("overall", {
+                "p5": -5.0, "p25": -2.0, "p50": 0.0, "p75": 1.0, "p95": 3.0
+            }))
+            p5_m, p50_m, p95_m = mmse_env["p5"], mmse_env["p50"], mmse_env["p95"]
+
+            d_model = self.models_delta.get(f"MMSE_{h}m")
+            if d_model:
+                d_raw = float(d_model.predict(X)[0])
+            elif f"MMSE_{h}m" in self.models_reg:
+                d_raw = float(self.models_reg[f"MMSE_{h}m"].predict(X)[0]) - curr_mmse
+            else:
+                d_raw = 0.0
+
+            out_m = (d_raw < p5_m or d_raw > p95_m)
+            d_clamped = max(p5_m, min(p95_m, d_raw))
+            if out_m or any_input_out_of_range:
+                d_final = 0.5 * d_clamped + 0.5 * p50_m
+                u_mult_m = 1.5
+                any_unreliable = True
+                if out_m:
+                    scope_warnings.append(
+                        f"MMSE forecast change ({round(d_raw, 2)}) fell outside [{p5_m}, {p95_m}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_m})."
+                    )
+            else:
+                d_final = d_clamped
+                u_mult_m = 1.0
+
+            # Plausible constraint: impaired patient should not improve significantly
+            if (anchor_stage in ["MCI", "AD"] or curr_mmse <= 27.0) and d_final > 1.0:
+                scope_warnings.append(
+                    f"Implausible MMSE improvement (+{round(d_final, 1)}) for {anchor_stage} stage; bounded to +1.0."
+                )
+                d_final = 1.0
+            if anchor_stage == "AD" and curr_mmse <= 17.0 and d_final > 0.0:
+                d_final = 0.0
+
+            mmse_pred = max(0.0, min(30.0, curr_mmse + d_final))
+            mmse_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("MMSE", 1.5) * u_mult_m
             mmse_lo = max(0.0, round(mmse_pred - 1.64 * mmse_mae, 1))
             mmse_hi = min(30.0, round(mmse_pred + 1.64 * mmse_mae, 1))
 
-            # CDGLOBAL
-            cdg_model = self.models_reg.get(f"CDGLOBAL_{h}m")
-            cdg_pred = float(cdg_model.predict(X)[0]) if cdg_model else curr_cdg
-            cdg_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("CDGLOBAL", 0.1)
+            # ── 2. CDGLOBAL ───────────────────────────────────────────────
+            cdg_env = env_h.get("CDGLOBAL", {}).get("by_stage", {}).get(anchor_stage, env_h.get("CDGLOBAL", {}).get("overall", {
+                "p5": 0.0, "p25": 0.0, "p50": 0.0, "p75": 0.0, "p95": 0.5
+            }))
+            p5_c, p50_c, p95_c = cdg_env["p5"], cdg_env["p50"], cdg_env["p95"]
+
+            d_cdg_model = self.models_delta.get(f"CDGLOBAL_{h}m")
+            if d_cdg_model:
+                d_cdg_raw = float(d_cdg_model.predict(X)[0])
+            elif f"CDGLOBAL_{h}m" in self.models_reg:
+                d_cdg_raw = float(self.models_reg[f"CDGLOBAL_{h}m"].predict(X)[0]) - curr_cdg
+            else:
+                d_cdg_raw = 0.0
+
+            out_c = (round(d_cdg_raw, 2) < p5_c or round(d_cdg_raw, 2) > p95_c)
+            d_cdg_clamped = max(p5_c, min(p95_c, d_cdg_raw))
+            if out_c or any_input_out_of_range:
+                d_cdg_final = 0.5 * d_cdg_clamped + 0.5 * p50_c
+                u_mult_c = 1.5
+                any_unreliable = True
+                if out_c:
+                    scope_warnings.append(
+                        f"CDGLOBAL forecast change ({round(d_cdg_raw, 2)}) fell outside [{p5_c}, {p95_c}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_c})."
+                    )
+            else:
+                d_cdg_final = d_cdg_clamped
+                u_mult_c = 1.0
+
+            cdg_pred = max(0.0, min(3.0, curr_cdg + d_cdg_final))
+            cdg_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("CDGLOBAL", 0.1) * u_mult_c
             cdg_lo = max(0.0, round(cdg_pred - 1.64 * cdg_mae, 2))
             cdg_hi = min(3.0, round(cdg_pred + 1.64 * cdg_mae, 2))
 
-            # TOTSCORE
-            tot_model = self.models_reg.get(f"TOTSCORE_{h}m")
-            tot_pred = float(tot_model.predict(X)[0]) if tot_model else curr_tot
-            tot_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("TOTSCORE", 3.0)
+            # ── 3. TOTSCORE ───────────────────────────────────────────────
+            tot_env = env_h.get("TOTSCORE", {}).get("by_stage", {}).get(anchor_stage, env_h.get("TOTSCORE", {}).get("overall", {
+                "p5": -4.0, "p25": -1.0, "p50": 1.0, "p75": 3.0, "p95": 9.0
+            }))
+            p5_t, p50_t, p95_t = tot_env["p5"], tot_env["p50"], tot_env["p95"]
+
+            d_tot_model = self.models_delta.get(f"TOTSCORE_{h}m")
+            if d_tot_model:
+                d_tot_raw = float(d_tot_model.predict(X)[0])
+            elif f"TOTSCORE_{h}m" in self.models_reg:
+                d_tot_raw = float(self.models_reg[f"TOTSCORE_{h}m"].predict(X)[0]) - curr_tot
+            else:
+                d_tot_raw = 0.0
+
+            out_t = (round(d_tot_raw, 2) < p5_t or round(d_tot_raw, 2) > p95_t)
+            d_tot_clamped = max(p5_t, min(p95_t, d_tot_raw))
+            if out_t or any_input_out_of_range:
+                d_tot_final = 0.5 * d_tot_clamped + 0.5 * p50_t
+                u_mult_t = 1.5
+                any_unreliable = True
+                if out_t:
+                    scope_warnings.append(
+                        f"TOTSCORE forecast change ({round(d_tot_raw, 2)}) fell outside [{p5_t}, {p95_t}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_t})."
+                    )
+            else:
+                d_tot_final = d_tot_clamped
+                u_mult_t = 1.0
+
+            tot_pred = max(0.0, min(70.0, curr_tot + d_tot_final))
+            tot_mae = HORIZON_RESIDUAL_MAE.get(h, {}).get("TOTSCORE", 3.0) * u_mult_t
             tot_lo = max(0.0, round(tot_pred - 1.64 * tot_mae, 1))
             tot_hi = min(70.0, round(tot_pred + 1.64 * tot_mae, 1))
 
-            # Conversion risk
+            # ── 4. Conversion risk ────────────────────────────────────────
             conv_model = self.models_conv.get(h)
             conv_prob = 0.0
             if conv_model:
@@ -142,6 +302,8 @@ class TwinProgression:
                 "conversion_prob": conv_prob,
             }
 
+        forecast["forecast_reliability"] = "low" if any_unreliable else "ok"
+        forecast["scope_warnings"] = list(dict.fromkeys(scope_warnings))
         return forecast
 
 

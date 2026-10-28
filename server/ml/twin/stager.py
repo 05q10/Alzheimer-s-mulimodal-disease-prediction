@@ -249,7 +249,73 @@ class TwinStager:
                 row[col] = np.nan
 
         X = pd.DataFrame([row])
-        probs = self._calibrated_probs(X)[0]
+        probs = np.array(self._calibrated_probs(X)[0], dtype=float)
+
+        # ── Clinical Sanity & Severity Agreement Rules (Part 3.4 & 3.6) ──
+        mmse = inputs.get("MMSE", inputs.get("MMSCORE"))
+        cdr = inputs.get("CDGLOBAL")
+        adas = inputs.get("TOTSCORE")
+        faq = inputs.get("FAQTOTAL", inputs.get("FAQ"))
+
+        # Monotonicity adjustments
+        # 1. Lowering MMSE must not raise P(CN)
+        if mmse is not None:
+            m = float(mmse)
+            if m <= 17.0:
+                probs[0] = min(probs[0], 0.05)
+            elif m <= 20.0:
+                probs[0] = min(probs[0], 0.15)
+            elif m <= 23.0:
+                probs[0] = min(probs[0], 0.40)
+            elif m <= 25.0:
+                probs[0] = min(probs[0], 0.70)
+
+        # 2. Raising ADAS11 must not lower P(AD)
+        if adas is not None:
+            a = float(adas)
+            if a >= 35.0:
+                probs[2] = max(probs[2], 0.65)
+            elif a >= 25.0:
+                probs[2] = max(probs[2], 0.45)
+            elif a >= 20.0:
+                probs[2] = max(probs[2], 0.30)
+
+        # Severity agreement overrides
+        # CN agreement: MMSE >= 28, CDR 0, ADAS <= 10, FAQ <= 1 -> P(CN) >= 0.70
+        if (mmse is not None and float(mmse) >= 28.0) and (cdr is not None and float(cdr) == 0.0):
+            adas_ok = (adas is None or float(adas) <= 10.0)
+            faq_ok = (faq is None or float(faq) <= 1.0)
+            if adas_ok and faq_ok:
+                probs[0] = max(probs[0], 0.75)
+                if probs[0] <= max(probs[1], probs[2]):
+                    probs[0] = max(probs[1], probs[2]) + 0.20
+
+        # MCI agreement: MMSE 24-27, CDR 0.5, ADAS <= 18 -> MCI is top class
+        if (mmse is not None and 24.0 <= float(mmse) <= 27.5) and (cdr is not None and float(cdr) == 0.5):
+            adas_ok = (adas is None or float(adas) <= 18.0)
+            if adas_ok:
+                if probs[1] <= max(probs[0], probs[2]):
+                    probs[1] = max(probs[0], probs[2]) + 0.20
+
+        # Mild AD agreement: MMSE 18-22, CDR 1, ADAS >= 20 -> P(AD) >= 0.70
+        if (mmse is not None and 18.0 <= float(mmse) <= 22.0) and (cdr is not None and float(cdr) >= 1.0):
+            adas_ok = (adas is None or float(adas) >= 20.0)
+            if adas_ok:
+                probs[2] = max(probs[2], 0.72)
+                if probs[2] <= max(probs[0], probs[1]):
+                    probs[2] = max(probs[0], probs[1]) + 0.20
+
+        # Moderate AD agreement: MMSE <= 17, CDR >= 1, ADAS >= 30 -> P(AD) >= 0.80
+        if (mmse is not None and float(mmse) <= 17.0) and (cdr is not None and float(cdr) >= 1.0):
+            adas_ok = (adas is None or float(adas) >= 30.0)
+            if adas_ok:
+                probs[2] = max(probs[2], 0.82)
+                if probs[2] <= max(probs[0], probs[1]):
+                    probs[2] = max(probs[0], probs[1]) + 0.25
+
+        # Normalize probabilities to sum to 1.0
+        probs = np.maximum(probs, 0.001)
+        probs = probs / np.sum(probs)
         stage_idx = int(np.argmax(probs))
 
         return {

@@ -207,6 +207,7 @@ Query param: `horizon` = 6 | 12 | 24 (months, default 24).
   "scope_warnings": [
     "Implausible MMSE change of -4.0 points over 12 months..."
   ],
+  "forecast_reliability": "ok",
   "disclaimer": "Hypothetical what-if scenario. Projections represent counterfactual simulations..."
 }
 ```
@@ -214,17 +215,17 @@ Query param: `horizon` = 6 | 12 | 24 (months, default 24).
 ---
 
 ### 7. `DELETE /twin/{twin_id}/visit/last` — Undo Last Visit
-Removes the most recent follow-up visit and recalculates the prior clinical stage and trajectory.
+Removes the most recent follow-up visit and recalculates the prior clinical stage and trajectory from remaining visits.
 
 ---
 
 ### 8. `POST /twin/{twin_id}/reset` — Reset to Baseline
-Resets the twin to month-0 baseline state, removing all subsequent visits.
+Restores EXACT baseline snapshot from creation time, clearing visits and scenarios, and appends a "reset" history event.
 
 ---
 
 ### 9. `POST /twin/{twin_id}/simulate` — What-If Simulation
-Decline scaling (`decline_multiplier`: 0.5–1.5). Carries mandatory illustrative disclaimer.
+Decline scaling (`decline_multiplier`: 0.5–1.5) across all cognitive targets (MMSE, CDGLOBAL, TOTSCORE). Carries mandatory illustrative disclaimer.
 
 ---
 
@@ -238,8 +239,8 @@ Returns 6 pre-built demo patient entries (real ADNI + synthetic flagged).
 Returns held-out test metrics, valid clinical bounds and scopes, limitations list, and data provenance.
 ```json
 {
-  "stager": { "T1_accuracy": 0.81, ... },
-  "progression": { "MMSE_MAE_12m": 1.465, ... },
+  "stager": { "T1_accuracy": 0.81 },
+  "progression": { "MMSE_MAE_12m": 1.465 },
   "scope": {
     "age_range": [60.7, 84.7],
     "horizons_months": [6, 12, 24],
@@ -248,11 +249,18 @@ Returns held-out test metrics, valid clinical bounds and scopes, limitations lis
       "CDGLOBAL": [0, 3],
       "TOTSCORE": [0, 70]
     },
+    "input_ranges": {
+      "age": [60.7, 84.7],
+      "MMSE": [20.0, 30.0],
+      "CDGLOBAL": [0.0, 1.0],
+      "TOTSCORE": [2.3, 26.3],
+      "FAQTOTAL": [0.0, 24.0]
+    },
     "training_cohort": "ADNI, 2123 subjects"
   },
   "limitations": [ ... ],
-  "resnet_disclaimer": "...",
-  "fusion_disclaimer": "..."
+  "resnet_disclaimer": "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2.",
+  "fusion_disclaimer": "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2."
 }
 ```
 

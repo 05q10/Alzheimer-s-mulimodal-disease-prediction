@@ -254,6 +254,8 @@ def _compute_state_and_forecast(
             d_base = None
 
     for h, p in raw_fc.items():
+        if h not in ["6", "12", "24"]:
+            continue
         sub_probs = StageProbs(**p["stage_probs"]) if "stage_probs" in p else stage_probs
         fc_month = last_m + int(h)
         fc_date = None
@@ -295,6 +297,22 @@ def _compute_state_and_forecast(
     elif latest_visit.get("MMSE") is not None:
         rate_of_decline = {"MMSE_per_year": -1.2, "vs_cohort_percentile": 55}
 
+    # 4. Scope warnings and forecast reliability
+    age_val = demographics.get("age", 70.0)
+    base_warnings = compute_scope_warnings(
+        age=age_val,
+        scores={
+            "MMSE": latest_visit.get("MMSE"),
+            "CDGLOBAL": latest_visit.get("CDGLOBAL"),
+            "TOTSCORE": latest_visit.get("TOTSCORE"),
+            "FAQTOTAL": latest_visit.get("FAQTOTAL"),
+        }
+    )
+    combined_warnings = list(dict.fromkeys(base_warnings + raw_fc.get("scope_warnings", [])))
+    f_rel = raw_fc.get("forecast_reliability", "ok")
+    if any("training range" in w or "outside" in w or "Discordant" in w or "Inconsistent" in w for w in combined_warnings):
+        f_rel = "low"
+
     state = TwinState(
         stage_probs=stage_probs,
         stage=stage_res["stage"],
@@ -305,8 +323,8 @@ def _compute_state_and_forecast(
         rate_of_decline=rate_of_decline,
         shap_drivers=stage_res.get("shap_top5", []),
         fusion=None,
-        scope_warnings=[],
-        forecast_reliability="ok",
+        scope_warnings=combined_warnings,
+        forecast_reliability=f_rel,
     )
     return _apply_mri_fusion_if_present(state, modalities)
 
@@ -841,23 +859,54 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     decline_mult = req.decline_multiplier if req.decline_multiplier is not None else 1.0
     scen_fc_points: Dict[str, ForecastPoint] = {}
     for h, pt in scen_state.forecast.items():
-        if decline_mult != 1.0 and pt.MMSE_mean is not None:
-            cur_m = hypo_latest.get("MMSE", 26.0)
-            diff = (cur_m - pt.MMSE_mean) * decline_mult
-            new_mean = round(max(0.0, min(30.0, cur_m - diff)), 1)
-            new_lo = round(max(0.0, pt.MMSE_lo - (diff - (cur_m - pt.MMSE_mean))), 1)
-            new_hi = round(min(30.0, pt.MMSE_hi - (diff - (cur_m - pt.MMSE_mean))), 1)
-            conv = round(min(1.0, (pt.conversion_prob or 0.0) * decline_mult), 4) if pt.conversion_prob else None
+        if decline_mult != 1.0:
+            # 1. MMSE (lower = worse)
+            if pt.MMSE_mean is not None:
+                cur_m = float(hypo_latest.get("MMSE") if hypo_latest.get("MMSE") is not None else 26.0)
+                d_m = pt.MMSE_mean - cur_m
+                scaled_d_m = d_m * decline_mult if d_m < 0 else d_m / decline_mult
+                new_mean = round(max(0.0, min(30.0, cur_m + scaled_d_m)), 1)
+                new_lo = round(max(0.0, pt.MMSE_lo + (scaled_d_m - d_m)), 1)
+                new_hi = round(min(30.0, pt.MMSE_hi + (scaled_d_m - d_m)), 1)
+            else:
+                new_mean, new_lo, new_hi = None, None, None
+
+            # 2. CDGLOBAL (higher = worse)
+            if pt.CDGLOBAL_mean is not None:
+                cur_c = float(hypo_latest.get("CDGLOBAL") if hypo_latest.get("CDGLOBAL") is not None else 0.5)
+                d_c = pt.CDGLOBAL_mean - cur_c
+                scaled_d_c = d_c * decline_mult if d_c > 0 else d_c / decline_mult
+                new_cdg = round(max(0.0, min(3.0, cur_c + scaled_d_c)), 2)
+                new_cdg_lo = round(max(0.0, pt.CDGLOBAL_lo + (scaled_d_c - d_c)), 2)
+                new_cdg_hi = round(min(3.0, pt.CDGLOBAL_hi + (scaled_d_c - d_c)), 2)
+            else:
+                new_cdg, new_cdg_lo, new_cdg_hi = None, None, None
+
+            # 3. TOTSCORE (higher = worse)
+            if pt.TOTSCORE_mean is not None:
+                cur_t = float(hypo_latest.get("TOTSCORE") if hypo_latest.get("TOTSCORE") is not None else 12.0)
+                d_t = pt.TOTSCORE_mean - cur_t
+                scaled_d_t = d_t * decline_mult if d_t > 0 else d_t / decline_mult
+                new_tot = round(max(0.0, min(70.0, cur_t + scaled_d_t)), 1)
+                new_tot_lo = round(max(0.0, pt.TOTSCORE_lo + (scaled_d_t - d_t)), 1)
+                new_tot_hi = round(min(70.0, pt.TOTSCORE_hi + (scaled_d_t - d_t)), 1)
+            else:
+                new_tot, new_tot_lo, new_tot_hi = None, None, None
+
+            conv = round(min(1.0, max(0.0, (pt.conversion_prob or 0.0) * decline_mult)), 4) if pt.conversion_prob else None
+
             scen_fc_points[h] = ForecastPoint(
+                month=pt.month,
+                date=pt.date,
                 MMSE_mean=new_mean,
                 MMSE_lo=new_lo,
                 MMSE_hi=new_hi,
-                CDGLOBAL_mean=pt.CDGLOBAL_mean,
-                CDGLOBAL_lo=pt.CDGLOBAL_lo,
-                CDGLOBAL_hi=pt.CDGLOBAL_hi,
-                TOTSCORE_mean=pt.TOTSCORE_mean,
-                TOTSCORE_lo=pt.TOTSCORE_lo,
-                TOTSCORE_hi=pt.TOTSCORE_hi,
+                CDGLOBAL_mean=new_cdg,
+                CDGLOBAL_lo=new_cdg_lo,
+                CDGLOBAL_hi=new_cdg_hi,
+                TOTSCORE_mean=new_tot,
+                TOTSCORE_lo=new_tot_lo,
+                TOTSCORE_hi=new_tot_hi,
                 stage_probs=pt.stage_probs,
                 conversion_prob=conv,
             )
@@ -886,13 +935,17 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     if base_fc and scen_fc_target and base_fc.MMSE_mean is not None and scen_fc_target.MMSE_mean is not None:
         delta["MMSE_mean"] = round(scen_fc_target.MMSE_mean - base_fc.MMSE_mean, 2)
 
+    combined_warnings = list(dict.fromkeys(warnings + scen_state.scope_warnings))
+    scen_reliability = scen_state.forecast_reliability or "ok"
+
     return ScenarioResponse(
         twin_id=twin_id,
         horizon_months=req.horizon_months,
         baseline=baseline_payload,
         scenario=scen_payload,
         delta=delta,
-        scope_warnings=warnings,
+        scope_warnings=combined_warnings,
+        forecast_reliability=scen_reliability,
     )
 
 

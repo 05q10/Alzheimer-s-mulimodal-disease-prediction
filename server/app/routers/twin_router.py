@@ -224,6 +224,13 @@ def get_model_card():
                 "CDGLOBAL": [0, 3],
                 "TOTSCORE": [0, 70]
             },
+            "input_ranges": {
+                "age": [60.7, 84.7],
+                "MMSE": [20.0, 30.0],
+                "CDGLOBAL": [0.0, 1.0],
+                "TOTSCORE": [2.3, 26.3],
+                "FAQTOTAL": [0.0, 24.0]
+            },
             "training_cohort": "ADNI, 2123 subjects",
         },
         limitations=[

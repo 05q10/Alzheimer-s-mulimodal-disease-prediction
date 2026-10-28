@@ -205,6 +205,7 @@ class ScenarioResponse(BaseModel):
     scenario: Dict[str, Any]
     delta: Dict[str, Any]
     scope_warnings: List[str]
+    forecast_reliability: Optional[Literal["ok", "low"]] = "ok"
     disclaimer: str = (
         "Hypothetical what-if scenario. Projections represent counterfactual simulations "
         "and are NOT clinical predictions. Model uncertainty and biological variability apply."
