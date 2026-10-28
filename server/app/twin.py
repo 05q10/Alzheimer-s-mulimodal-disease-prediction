@@ -22,6 +22,7 @@ from app.models.twin_models import (
     CreateTwinRequest, AddVisitRequest,
     BiomarkersPayload, MRIVolumesPayload,
     SimulateResponse, ScenarioRequest, ScenarioResponse,
+    InputUsageItem, InputUsageResponse, TwinExplanationResponse,
 )
 from ml.twin.stager import get_stager
 from ml.twin.progression import get_progression
@@ -405,6 +406,29 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
         "education_years": edu,
         "apoe4_count": apoe4,
     }
+    if req.demographics:
+        for k, v in req.demographics.model_dump(exclude_none=True).items():
+            if k not in demographics:
+                demographics[k] = v
+
+    # Preserve any flat extra intake fields
+    extra_intake_keys = [
+        "name", "ethnicity", "doctor_in_charge", "doctorInCharge", "height", "weight",
+        "BMI", "bmi", "smoking", "family_history_of_ad", "familyHistoryAlzheimers",
+        "alcohol", "alcoholConsumption", "physical_activity", "physicalActivity",
+        "diet_quality", "dietQuality", "sleep_quality", "sleepQuality",
+        "cardiovascular_disease", "cardiovascularDisease", "diabetes", "depression",
+        "head_injury", "headInjury", "hypertension", "functional_assessment",
+        "functionalAssessment", "adl", "ADL", "memory_complaints", "memoryComplaints",
+        "behavioral_problems", "behavioralProblems", "confusion", "disorientation",
+        "personality_changes", "personalityChanges", "difficulty_completing_tasks",
+        "difficultyCompletingTasks", "forgetfulness"
+    ]
+    for k in extra_intake_keys:
+        if hasattr(req, k) and getattr(req, k) is not None:
+            demographics[k] = getattr(req, k)
+        elif req.lifestyle and k in req.lifestyle:
+            demographics[k] = req.lifestyle[k]
 
     # 2. Scores parsing (nested or flat)
     latest_dict: Dict[str, Any] = {}
@@ -987,6 +1011,57 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     combined_warnings = list(dict.fromkeys(warnings + scen_state.scope_warnings))
     scen_reliability = scen_state.forecast_reliability or "ok"
 
+    # Build scenario drivers delta & method explanation
+    drivers_delta: List[Dict[str, Any]] = []
+    if req.hypothetical_visit:
+        for k, v in req.hypothetical_visit.items():
+            if v is not None:
+                base_v = getattr(latest_v, k, None) if hasattr(latest_v, k) else twin.demographics.get(k)
+                if base_v is not None:
+                    d = round(float(v) - float(base_v), 2)
+                    drivers_delta.append({
+                        "factor": k,
+                        "label": k,
+                        "delta": d,
+                        "impact": f"Hypothetical change of {d:+.1f} points in {k} shifts progression trajectory."
+                    })
+    if req.decline_multiplier is not None and req.decline_multiplier != 1.0:
+        drivers_delta.append({
+            "factor": "decline_multiplier",
+            "label": "Decline Rate Multiplier",
+            "delta": req.decline_multiplier,
+            "impact": f"Decline multiplier of {req.decline_multiplier}x applied to cognitive loss velocity."
+        })
+    if req.biomarkers:
+        drivers_delta.append({
+            "factor": "biomarkers",
+            "label": "CSF Biomarkers",
+            "delta": "attached/modified",
+            "impact": "CSF biomarker payload promoted staging to Tier T3."
+        })
+    if req.mri_volumes:
+        drivers_delta.append({
+            "factor": "mri_volumes",
+            "label": "Volumetric MRI",
+            "delta": "attached/modified",
+            "impact": "Volumetric MRI measurements promoted staging to Tier T4."
+        })
+    if req.lifestyle:
+        drivers_delta.append({
+            "factor": "lifestyle",
+            "label": "Lifestyle Modification",
+            "delta": str(req.lifestyle),
+            "impact": "Hypothetical lifestyle override adjusted progression decline multiplier."
+        })
+
+    method_steps = [
+        "1. Take current state and hypothetical follow-up visit or counterfactual inputs.",
+        "2. Forecast cognitive scores (MMSE, CDGLOBAL, TOTSCORE) at the chosen horizon (6, 12, or 24 months) using Model B delta progression models.",
+        "3. Apply the decline multiplier and literature-grounded lifestyle modifier to the predicted change.",
+        "4. Re-stage the patient with Model A (TwinStager) using the forecast scores.",
+        "5. Compute conversion risk across horizons (restricted to 6, 12, and 24 months because empirical validation and clinical protocol intervals in ADNI are standardized at these milestones; projections beyond 24m carry unvalidated cumulative drift)."
+    ]
+
     return ScenarioResponse(
         twin_id=twin_id,
         horizon_months=req.horizon_months,
@@ -995,6 +1070,8 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
         delta=delta,
         scope_warnings=combined_warnings,
         forecast_reliability=scen_reliability,
+        method=method_steps,
+        drivers_delta=drivers_delta,
     )
 
 
@@ -1081,3 +1158,18 @@ def reset_twin(twin_id: str) -> TwinFull:
     )
     _save_twin_to_disk(twin)
     return twin
+
+
+def get_input_usage(twin_id: str) -> InputUsageResponse:
+    twin = get_twin(twin_id)
+    from ml.twin.explainability import get_input_usage_matrix
+    raw_items = get_input_usage_matrix(twin.model_dump())
+    items = [InputUsageItem(**item) for item in raw_items]
+    return InputUsageResponse(twin_id=twin_id, items=items, field_count=len(items))
+
+
+def get_twin_explain(twin_id: str) -> TwinExplanationResponse:
+    twin = get_twin(twin_id)
+    from ml.twin.explainability import get_full_twin_explanation
+    raw_expl = get_full_twin_explanation(twin.model_dump())
+    return TwinExplanationResponse(**raw_expl)

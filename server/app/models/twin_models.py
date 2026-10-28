@@ -7,7 +7,7 @@ These are the full production schemas — stubs return fixture data.
 
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ── Shared leaf models ─────────────────────────────────────────────────────
@@ -99,6 +99,7 @@ class TwinFull(BaseModel):
 # ── Request / Input models ──────────────────────────────────────────────────
 
 class DemographicsInput(BaseModel):
+    model_config = ConfigDict(extra="allow")
     age: float = Field(ge=18, le=110)
     sex: Literal[0, 1] = Field(description="0=Male, 1=Female")
     education_years: float = Field(ge=0, le=30)
@@ -107,6 +108,7 @@ class DemographicsInput(BaseModel):
 
 
 class ScoresInput(BaseModel):
+    model_config = ConfigDict(extra="allow")
     MMSE: Optional[float] = Field(None, ge=0, le=30)
     CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
     TOTSCORE: Optional[float] = Field(None, ge=0, le=70)
@@ -116,6 +118,7 @@ class ScoresInput(BaseModel):
 
 
 class BiomarkersPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
     ABETA: Optional[float] = None
     TAU: Optional[float] = None
     PTAU: Optional[float] = None
@@ -125,6 +128,7 @@ class BiomarkersPayload(BaseModel):
 
 
 class MRIVolumesPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
     hippocampus: Optional[float] = None
     hippocampus_left: Optional[float] = None
     hippocampus_right: Optional[float] = None
@@ -138,6 +142,7 @@ class MRIVolumesPayload(BaseModel):
 
 class CreateTwinRequest(BaseModel):
     """POST /twin — supports both patient-builder nested shape and flat legacy shape."""
+    model_config = ConfigDict(extra="allow")
     name: Optional[str] = None
     baseline_date: Optional[str] = None   # YYYY-MM-DD
 
@@ -212,6 +217,50 @@ class ScenarioResponse(BaseModel):
         "Hypothetical what-if scenario. Projections represent counterfactual simulations "
         "and are NOT clinical predictions. Model uncertainty and biological variability apply."
     )
+    method: List[str] = Field(default_factory=list)
+    drivers_delta: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+# ── Explainability Models ──────────────────────────────────────────────────
+
+class InputUsageItem(BaseModel):
+    field: str
+    label: str
+    category: str
+    value: Any = None
+    entered_value: Any = None
+    status: Literal[
+        "used_in_stage",
+        "used_in_forecast",
+        "used_in_lifestyle_modifier",
+        "used_in_symptom_screen",
+        "used_in_biomarker_ensemble",
+        "used_in_mri_fusion",
+        "recorded_only",
+        "missing",
+        "assumed_default"
+    ]
+    display_status: str
+    used_by: List[str] = Field(default_factory=list)
+    reason: str
+
+
+class InputUsageResponse(BaseModel):
+    twin_id: str
+    items: List[InputUsageItem]
+    field_count: int
+
+
+class TwinExplanationResponse(BaseModel):
+    twin_id: str
+    stage: Dict[str, Any]
+    forecast: Dict[str, Any]
+    lifestyle_modifier: Dict[str, Any]
+    symptom_screen: Dict[str, Any]
+    reliability: Any
+    forecast_reliability: Optional[str] = "ok"
+    scope_warnings: List[str] = Field(default_factory=list)
+    narrative: str
 
 
 class SimulateRequest(BaseModel):

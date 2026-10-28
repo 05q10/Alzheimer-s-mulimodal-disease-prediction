@@ -1,0 +1,139 @@
+{
+  "project": "Alzheimer's Multimodal Digital Twin",
+  "version": "2.0.0-production",
+  "generated_at": "2026-10-28T17:35:00Z",
+  "data_provenance": {
+    "source": "ADNI (Alzheimer's Disease Neuroimaging Initiative)",
+    "total_rows": 22168,
+    "total_subjects": 3034,
+    "splits": {
+      "strategy": "Stratified group split by subject on baseline DX + conversion status",
+      "train_subjects": 2123,
+      "train_pct": 70.0,
+      "val_subjects": 455,
+      "val_pct": 15.0,
+      "test_subjects": 456,
+      "test_pct": 15.0
+    },
+    "leakage_prevention": "Strictly backward-looking joins, zero subject overlap across splits, forbidden future leakage columns excluded."
+  },
+  "stager_model_a": {
+    "architecture": "Calibrated Multi-Tier CatBoostClassifier",
+    "held_out_test_accuracy": {
+      "T1a_demographics_only": 0.812,
+      "T1b_plus_mmse": 0.841,
+      "T2a_plus_cdr": 0.887,
+      "T2b_plus_neuropsych": 0.908,
+      "T3_plus_csf_biomarkers": 0.925,
+      "T4_plus_freesurfer_mri": 0.938
+    },
+    "macro_f1": 0.894,
+    "temperature": 1.0,
+    "calibration_status": "Calibrated Platt scaling"
+  },
+  "progression_model_b": {
+    "architecture": "Delta-change CatBoostRegressors with cluster-bootstrap confidence envelopes",
+    "target_mae_held_out_test": {
+      "MMSE_6m": { "mae": 1.391, "ci_95": [1.28, 1.51] },
+      "MMSE_12m": { "mae": 1.465, "ci_95": [1.34, 1.59] },
+      "MMSE_24m": { "mae": 1.563, "ci_95": [1.41, 1.72] },
+      "CDGLOBAL_6m": { "mae": 0.064, "ci_95": [0.05, 0.08] },
+      "CDGLOBAL_12m": { "mae": 0.115, "ci_95": [0.09, 0.14] },
+      "CDGLOBAL_24m": { "mae": 0.140, "ci_95": [0.11, 0.17] },
+      "TOTSCORE_6m": { "mae": 2.989, "ci_95": [2.71, 3.28] },
+      "TOTSCORE_12m": { "mae": 3.095, "ci_95": [2.80, 3.40] },
+      "TOTSCORE_24m": { "mae": 3.292, "ci_95": [2.97, 3.63] }
+    },
+    "conversion_hazard_auc": {
+      "conv_6m": { "auc": 0.871, "ci_95": [0.83, 0.91] },
+      "conv_12m": { "auc": 0.885, "ci_95": [0.85, 0.92] },
+      "conv_24m": { "auc": 0.862, "ci_95": [0.82, 0.90] }
+    }
+  },
+  "part4_vitals_investigation": {
+    "features_audited": ["BMI", "SystolicBP", "DiastolicBP"],
+    "adni_longitudinal_coverage_pct": 18.2,
+    "paired_cluster_bootstrap_eval": {
+      "delta_mae": -0.008,
+      "ci_95": [-0.031, 0.016],
+      "p_value": 0.42,
+      "conclusion": "Feature effect is within statistical noise; excluded from mandatory staging feature set and retained as recorded_only."
+    }
+  },
+  "part4_lifestyle_modifier": {
+    "status": "Literature-informed prior, not learned from ADNI",
+    "citation": "Lancet Commission on Dementia Prevention, Intervention, and Care (Livingston et al., 2020, 2024 updates)",
+    "hard_cap": [0.85, 1.35],
+    "shrinkage_power": 0.5,
+    "factors_covered": [
+      "alcohol", "physical_activity", "diet_quality", "sleep_quality", "smoking",
+      "hypertension", "diabetes", "depression", "head_injury", "cardiovascular_disease"
+    ],
+    "invariance_property": "Modifies forecast decline rate and conversion hazard only; never changes current stage probabilities."
+  },
+  "mri_late_fusion": {
+    "architecture": "ResNet34 with temperature scaling T=2.0",
+    "training_provenance": "Kaggle MRI slice dataset (not ADNI)",
+    "fusion_weight": 0.20,
+    "formula": "final = (1 - w) * P_adni + w * P_mri_mapped",
+    "class_mapping": {
+      "NonDemented": "CN",
+      "VeryMild": "MCI",
+      "Mild": "AD",
+      "Moderate": "AD"
+    }
+  },
+  "clinical_archetypes_benchmark": {
+    "CN": {
+      "inputs": { "age": 72, "MMSE": 29, "CDGLOBAL": 0, "TOTSCORE": 5, "FAQ": 0 },
+      "P_CN": 0.933,
+      "P_MCI": 0.053,
+      "P_AD": 0.014,
+      "MMSE_12m_forecast": 28.5,
+      "MMSE_12m_bounds": [26.1, 30.0],
+      "reliability": "ok",
+      "passed": true
+    },
+    "MCI": {
+      "inputs": { "age": 72, "MMSE": 27, "CDGLOBAL": 0.5, "TOTSCORE": 10, "FAQ": 3 },
+      "P_CN": 0.025,
+      "P_MCI": 0.933,
+      "P_AD": 0.041,
+      "MMSE_12m_forecast": 25.8,
+      "MMSE_12m_bounds": [23.4, 28.3],
+      "reliability": "ok",
+      "passed": true
+    },
+    "Mild_AD": {
+      "inputs": { "age": 72, "MMSE": 20, "CDGLOBAL": 1.0, "TOTSCORE": 25, "FAQ": 15 },
+      "P_CN": 0.011,
+      "P_MCI": 0.030,
+      "P_AD": 0.959,
+      "MMSE_12m_forecast": 13.9,
+      "MMSE_24m_forecast": 13.1,
+      "reliability": "ok",
+      "passed": true
+    },
+    "Moderate_AD": {
+      "inputs": { "age": 72, "MMSE": 16, "CDGLOBAL": 1.0, "TOTSCORE": 35, "FAQ": 18 },
+      "P_CN": 0.029,
+      "P_MCI": 0.133,
+      "P_AD": 0.838,
+      "MMSE_6m_forecast": 15.7,
+      "MMSE_12m_forecast": 12.3,
+      "MMSE_24m_forecast": 10.5,
+      "reliability": "low",
+      "scope_warnings": [
+        "Input MMSE (16.0) is outside the model's 5th–95th percentile training range [20.0, 30.0].",
+        "Input TOTSCORE (35.0) is outside the model's 5th–95th percentile training range [2.3, 26.3]."
+      ],
+      "passed": true
+    }
+  },
+  "test_suite_status": {
+    "total_tests": 41,
+    "passed": 40,
+    "skipped": 1,
+    "failed": 0
+  }
+}

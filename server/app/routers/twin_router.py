@@ -20,6 +20,7 @@ from app.models.twin_models import (
     SimulateRequest, SimulateResponse,
     ScenarioRequest, ScenarioResponse,
     DemoPatientEntry, ModelCardMetrics,
+    InputUsageResponse, TwinExplanationResponse,
 )
 from ml.twin.constants import FUSION_DISCLAIMER
 from app.twin import (
@@ -33,6 +34,8 @@ from app.twin import (
     run_scenario as svc_run_scenario,
     undo_last_visit as svc_undo_last_visit,
     reset_twin as svc_reset_twin,
+    get_input_usage as svc_get_input_usage,
+    get_twin_explain as svc_get_twin_explain,
 )
 from app.demo_patients import initialize_demo_patients
 
@@ -153,6 +156,20 @@ def get_forecast_route(twin_id: str, horizon: Optional[int] = Query(None, ge=6, 
             fc_point = forecast[nearest]
         return {"twin_id": twin_id, "horizon_months": horizon, "forecast": fc_point}
     return {"twin_id": twin_id, "forecast": forecast}
+
+
+@router.get("/twin/{twin_id}/input-usage", response_model=InputUsageResponse,
+            summary="Full input lineage and usage matrix for all 43 intake fields")
+def get_input_usage_route(twin_id: str):
+    """Returns transparent audit of how every intake field is processed, defaulted, or mapped."""
+    return svc_get_input_usage(twin_id)
+
+
+@router.get("/twin/{twin_id}/explain", response_model=TwinExplanationResponse,
+            summary="Comprehensive explainability: SHAP drivers, leave-one-out, lifestyle, and narrative")
+def get_twin_explain_route(twin_id: str):
+    """Returns top SHAP stage drivers, modality leave-one-out deltas, progression drivers, and clinical narrative."""
+    return svc_get_twin_explain(twin_id)
 
 
 @router.post("/twin/{twin_id}/scenario", response_model=ScenarioResponse,

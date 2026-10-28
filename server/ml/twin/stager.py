@@ -331,18 +331,17 @@ class TwinStager:
     def _shap_top5(self, X: pd.DataFrame) -> List[Dict]:
         """Return top-5 SHAP drivers for a single prediction."""
         try:
-            import shap
-            explainer = shap.TreeExplainer(self.model)
-            vals = explainer.shap_values(X)
-            # vals is list of 3 arrays (one per class); use the predicted class
+            vals = self.model.get_feature_importance(data=Pool(X), type="ShapValues")
             probs = self._calibrated_probs(X)[0]
             cls = int(np.argmax(probs))
-            sv = vals[cls][0]
+            sv = vals[0, cls, :-1]
             feat_names = self.feature_list
             top_idx = np.argsort(np.abs(sv))[::-1][:5]
-            return [{"feature": feat_names[i],
-                     "value": float(X.iloc[0][feat_names[i]]),
-                     "shap": round(float(sv[i]), 4)} for i in top_idx]
+            return [{
+                "feature": feat_names[i],
+                "value": float(X.iloc[0][feat_names[i]]),
+                "shap": round(float(sv[i]), 4),
+            } for i in top_idx]
         except Exception:
             return []
 

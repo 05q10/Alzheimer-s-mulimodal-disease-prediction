@@ -167,7 +167,17 @@ Query param: `horizon` = 6 | 12 | 24 (months, default 24).
 
 ### 6. `POST /twin/{twin_id}/scenario` — Counterfactual What-If Scenario
 
-**Dry run: persists nothing.** Validates `horizon_months` (rejects anything other than 6, 12, 24 with HTTP 422).
+**Dry run: persists nothing.** Validates `horizon_months` (strictly 6, 12, or 24 months; HTTP 422 for others). Projections beyond 24m carry unvalidated cumulative drift, and ADNI clinical protocols standardize visits at 6, 12, and 24 month intervals.
+
+**Method Execution Steps**:
+1. Take the current baseline state and the hypothetical follow-up visit or counterfactual inputs.
+2. Forecast cognitive scores (MMSE, CDGLOBAL, TOTSCORE) at the chosen horizon (6, 12, or 24 months) using Model B delta progression models.
+3. Apply the decline multiplier and literature-grounded lifestyle modifier to the predicted change:
+   - `decline_multiplier` scales the predicted change $\Delta$ (e.g. 1.5x accelerates decline by 50%; 0.5x slows decline by 50%).
+   - `lifestyle` applies Lancet Commission pooled relative risks shrunk via square root ($\text{RR}^{0.5}$) and hard-capped to $[0.85, 1.35]$ on predicted change and conversion hazard.
+   - Crucial clinical guard: Lifestyle and decline multipliers NEVER modify current clinical stage or baseline probabilities.
+4. Re-stage the patient with Model A (TwinStager) using the forecast scores.
+5. Compute conversion risk across horizons.
 
 **Request body**:
 ```json
@@ -180,6 +190,7 @@ Query param: `horizon` = 6 | 12 | 24 (months, default 24).
   },
   "biomarkers": { "ABETA": 600.0, "TAU": 450.0, "PTAU": 45.0 },
   "mri_volumes": { "hippocampus": 5900.0, "icv": 1500000.0 },
+  "lifestyle": { "alcohol": 2.0, "physical_activity": 4.0 },
   "decline_multiplier": 1.2
 }
 ```
@@ -208,7 +219,18 @@ Query param: `horizon` = 6 | 12 | 24 (months, default 24).
     "Implausible MMSE change of -4.0 points over 12 months..."
   ],
   "forecast_reliability": "ok",
-  "disclaimer": "Hypothetical what-if scenario. Projections represent counterfactual simulations..."
+  "disclaimer": "Hypothetical what-if scenario. Projections represent counterfactual simulations...",
+  "method": [
+    "1. Take current state and hypothetical follow-up visit or counterfactual inputs.",
+    "2. Forecast cognitive scores (MMSE, CDGLOBAL, TOTSCORE) at the chosen horizon (6, 12, or 24 months) using Model B delta progression models.",
+    "3. Apply the decline multiplier and literature-grounded lifestyle modifier to the predicted change.",
+    "4. Re-stage the patient with Model A (TwinStager) using the forecast scores.",
+    "5. Compute conversion risk across horizons (restricted to 6, 12, and 24 months because empirical validation and clinical protocol intervals in ADNI are standardized at these milestones; projections beyond 24m carry unvalidated cumulative drift)."
+  ],
+  "drivers_delta": [
+    { "factor": "MMSE", "label": "MMSE", "delta": -4.0, "impact": "Hypothetical change of -4.0 points in MMSE shifts progression trajectory." },
+    { "factor": "decline_multiplier", "label": "Decline Rate Multiplier", "delta": 1.2, "impact": "Decline multiplier of 1.2x applied to cognitive loss velocity." }
+  ]
 }
 ```
 
@@ -229,12 +251,146 @@ Decline scaling (`decline_multiplier`: 0.5–1.5) across all cognitive targets (
 
 ---
 
-### 10. `GET /demo/patients` — List Demo Personas
+### 10. `GET /twin/{twin_id}/input-usage` — Input Usage Matrix & Data Lineage
+Returns one row for every one of the 43 intake fields collected by the application.
+Status values: `used_in_stage`, `used_in_forecast`, `used_in_lifestyle_modifier`, `used_in_symptom_screen`, `used_in_biomarker_ensemble`, `used_in_mri_fusion`, `recorded_only`, `missing`, `assumed_default`.
+
+**Response**:
+```json
+{
+  "twin_id": "...",
+  "field_count": 43,
+  "items": [
+    {
+      "field": "age",
+      "label": "Patient Age",
+      "category": "Demographics",
+      "value": 72.0,
+      "status": "used_in_stage",
+      "display_status": "Used in stage",
+      "used_by": ["stager", "progression"],
+      "reason": "Primary demographic covariate across ADNI staging and longitudinal progression curves."
+    },
+    {
+      "field": "alcohol",
+      "label": "Alcohol Consumption",
+      "category": "Lifestyle",
+      "value": 2.4,
+      "status": "used_in_lifestyle_modifier",
+      "display_status": "Lifestyle adjustment",
+      "used_by": ["lifestyle_modifier", "symptom_screen"],
+      "reason": "Alcohol: no alcohol field exists in ADNI, so it adjusts the forecast through a literature-based multiplier, not the stage."
+    },
+    {
+      "field": "ethnicity",
+      "label": "Ethnicity",
+      "category": "Demographics",
+      "value": 0,
+      "status": "recorded_only",
+      "display_status": "Recorded only",
+      "used_by": [],
+      "reason": "Ethnicity: stored only; ADNI model does not use it to avoid demographic bias."
+    }
+  ]
+}
+```
+
+---
+
+### 11. `GET /twin/{twin_id}/explain` — Comprehensive Model Explainability
+Returns TreeSHAP stage drivers, modality leave-one-out marginal effects, progression forecast drivers, lifestyle modifier breakdown, Kaggle symptom screener, and deterministic 4-to-8 sentence clinical narrative.
+
+**Response**:
+```json
+{
+  "twin_id": "...",
+  "stage": {
+    "primary": "MCI",
+    "stage": "MCI",
+    "confidence": 0.86,
+    "probs": { "CN": 0.05, "MCI": 0.86, "AD": 0.09 },
+    "drivers": [
+      {
+        "feature": "CDGLOBAL",
+        "label": "Clinical Dementia Rating (CDR)",
+        "group": "cognitive",
+        "value": 0.5,
+        "contribution": 0.9125,
+        "direction": "toward_MCI"
+      }
+    ],
+    "leave_one_out": [
+      {
+        "modality": "advanced_scores",
+        "label": "Advanced Neuropsych Instruments",
+        "without_stage": "CN",
+        "without_probs": { "CN": 0.65, "MCI": 0.23, "AD": 0.12 },
+        "delta": { "CN": -0.60, "MCI": +0.63, "AD": -0.03 },
+        "summary": "Without advanced neuropsych scores: P(MCI) would be 23% instead of 86%."
+      }
+    ],
+    "by_group": {
+      "cognitive": 1.15,
+      "functional": 0.04,
+      "biomarker": 0.0,
+      "mri_volumes": 0.03,
+      "demographic": 0.02,
+      "genetics": 0.0,
+      "risk_factor": 0.0
+    }
+  },
+  "forecast": {
+    "drivers": [
+      {
+        "feature": "TOTSCORE",
+        "label": "ADAS11-Cog Total",
+        "target": "MMSE_12m",
+        "contribution": -0.32,
+        "direction": "toward faster decline",
+        "effect": "accelerating",
+        "impact": "ADAS11-Cog Total pushes toward faster decline (-0.32 pts)."
+      }
+    ],
+    "reliability": "high",
+    "forecast_reliability": "ok",
+    "scope_warnings": []
+  },
+  "lifestyle_modifier": {
+    "total_multiplier": 1.04,
+    "hazard_multiplier": 1.04,
+    "multipliers": [
+      {
+        "factor": "alcohol",
+        "label": "Alcohol Consumption",
+        "value": 3.5,
+        "multiplier": 1.02,
+        "description": "Alcohol Consumption x1.02 (Lancet 2024)"
+      }
+    ],
+    "caption": "Literature-informed estimate, applied to the forecast and conversion risk only. It does not change the current stage and was not learned from ADNI."
+  },
+  "symptom_screen": {
+    "risk_level": "Moderate Risk",
+    "risk_score": 0.42,
+    "drivers": [],
+    "caption": "A separate screening model from a different population; shown for reference and not part of the ADNI stage"
+  },
+  "reliability": "high",
+  "forecast_reliability": "ok",
+  "scope_warnings": [],
+  "narrative": "Stage MCI (86% confidence). The biggest push toward MCI is the Clinical Dementia Rating (CDR) (0.5) and Mini-Mental State Exam (MMSE) (26.0). Without advanced neuropsych scores: P(MCI) would be 23% instead of 86%. Progression trajectory is primarily shaped by ADAS11-Cog Total, which acts as an accelerating factor. All clinical measurements fall within the validated 5th–95th percentile training envelope."
+}
+```
+
+---
+
+### 12. `GET /demo/patients` — List Demo Personas
 Returns 6 pre-built demo patient entries (real ADNI + synthetic flagged).
 
 ---
 
-### 11. `GET /model-card` — Model Metrics, Scope & Disclaimers
+### 13. `GET /model-card` — Model Metrics, Scope & Disclaimers
+All numbers synchronized with `server/final_metrics.json`.
 
 Returns held-out test metrics, valid clinical bounds and scopes, limitations list, and data provenance.
 ```json
