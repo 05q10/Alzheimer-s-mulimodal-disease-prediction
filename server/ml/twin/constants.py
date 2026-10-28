@@ -115,12 +115,12 @@ RESNET_TO_DX = {
 # Late fusion weights (ADNI stager 80%, ResNet 20%)
 # ResNet was trained on an augmented non-ADNI Kaggle set.
 # Its published 99.7% accuracy is INFLATED and not validated on ADNI.
-# These weights are demo-only constants, not clinically validated.
-FUSION_WEIGHTS = {"adni": 0.80, "resnet": 0.20}
+# Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2
+MRI_FUSION_WEIGHT = 0.2
+MRI_TEMPERATURE = 2.0
+FUSION_WEIGHTS = {"adni": 1.0 - MRI_FUSION_WEIGHT, "resnet": MRI_FUSION_WEIGHT}
 FUSION_DISCLAIMER = (
-    "The ResNet MRI model was trained on a non-ADNI Kaggle dataset. "
-    "Its accuracy on ADNI subjects is unknown. The 80/20 fusion is "
-    "for demonstration purposes only and is NOT clinically validated."
+    "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2."
 )
 
 # GRU ship rule parameters

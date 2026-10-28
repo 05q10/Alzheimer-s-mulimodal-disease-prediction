@@ -113,7 +113,33 @@ Returns the full `TwinFull` object for the given `twin_id`.
 { "hippocampus": 6800.0, "entorhinal": 3400.0, "ventricles": 35000.0, "whole_brain": 1050000.0, "icv": 1500000.0 }
 ```
 
-#### 4c. `POST /twin/{twin_id}/modality/{modality_name}` — Generic Modality Router
+#### 4c. `POST /twin/{twin_id}/mri-image` — Upload MRI Slice & Late Fusion
+Accepts multipart form-data with field `"file"` (JPEG/PNG MRI slice).
+Runs ResNet34 with temperature scaling ($T=2.0$), maps predictions (`NonDemented` $\rightarrow$ `CN`, `VeryMild` $\rightarrow$ `MCI`, `Mild`+`Moderate` $\rightarrow$ `AD`), and fuses linearly with ADNI stager:
+$\text{final} = 0.8 \times P_{\text{adni}} + 0.2 \times P_{\text{mri\_mapped}}$
+
+**Response**:
+```json
+{
+  "mri": {
+    "predicted_class": "Mild",
+    "probs": { "NonDemented": 0.0001, "VeryMild": 0.0008, "Mild": 0.9989, "Moderate": 0.0001 },
+    "mapped_probs": { "CN": 0.0001, "MCI": 0.0008, "AD": 0.999 }
+  },
+  "state": {
+    "stage": "AD",
+    "stage_probs": { "CN": 0.04, "MCI": 0.21, "AD": 0.75 },
+    "fusion": {
+      "adni_probs": { "CN": 0.05, "MCI": 0.26, "AD": 0.69 },
+      "mri_probs": { "CN": 0.0001, "MCI": 0.0008, "AD": 0.999 },
+      "weight": 0.2,
+      "final_probs": { "CN": 0.04, "MCI": 0.21, "AD": 0.75 }
+    }
+  }
+}
+```
+
+#### 4d. `POST /twin/{twin_id}/modality/{modality_name}` — Generic Modality Router
 Supports `biomarkers`, `mri_volumes`, `mri_image`, `ocr_report`.
 
 ---

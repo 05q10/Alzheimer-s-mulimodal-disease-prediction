@@ -8,7 +8,7 @@ JSON persistence to server/data/twins/.
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -25,6 +25,7 @@ from app.models.twin_models import (
 )
 from ml.twin.stager import get_stager
 from ml.twin.progression import get_progression
+from ml.twin.constants import MRI_FUSION_WEIGHT
 
 TWINS_DIR = Path(__file__).resolve().parent.parent / "data" / "twins"
 TWINS_DIR.mkdir(parents=True, exist_ok=True)
@@ -131,11 +132,44 @@ def get_twin(twin_id: str) -> TwinFull:
     return twin
 
 
+def _apply_mri_fusion_if_present(state: TwinState, modalities: Dict[str, ModalityStatus]) -> TwinState:
+    """Late fusion by linear blend: final = (1-w)*P_adni + w*P_mri_mapped, w = MRI_FUSION_WEIGHT (0.2)."""
+    mri_mod = modalities.get("mri_image")
+    if mri_mod and mri_mod.present and mri_mod.latest and "mapped_probs" in mri_mod.latest:
+        mri_mapped = mri_mod.latest["mapped_probs"]
+        w = MRI_FUSION_WEIGHT
+        if state.fusion and "adni_probs" in state.fusion:
+            adni_p = state.fusion["adni_probs"]
+        else:
+            adni_p = {"CN": state.stage_probs.CN, "MCI": state.stage_probs.MCI, "AD": state.stage_probs.AD}
+
+        f_cn = (1.0 - w) * adni_p["CN"] + w * mri_mapped["CN"]
+        f_mci = (1.0 - w) * adni_p["MCI"] + w * mri_mapped["MCI"]
+        f_ad = (1.0 - w) * adni_p["AD"] + w * mri_mapped["AD"]
+        f_sum = f_cn + f_mci + f_ad
+        final_probs = {
+            "CN": round(f_cn / f_sum, 4),
+            "MCI": round(f_mci / f_sum, 4),
+            "AD": round(f_ad / f_sum, 4),
+        }
+        state.fusion = {
+            "adni_probs": adni_p,
+            "mri_probs": mri_mapped,
+            "weight": w,
+            "final_probs": final_probs,
+        }
+        state.stage_probs = StageProbs(**final_probs)
+        state.stage = max(["CN", "MCI", "AD"], key=lambda k: final_probs[k])
+        state.confidence = round(max(final_probs.values()), 4)
+    return state
+
+
 def _compute_state_and_forecast(
     demographics: Dict[str, Any],
     latest_visit: Dict[str, Any],
     visits: List[VisitRecord],
     modalities: Dict[str, ModalityStatus],
+    baseline_date: Optional[str] = None,
 ) -> TwinState:
     """Run Model A (staging) and Model B (progression) from latest patient features."""
     stager = get_stager()
@@ -211,9 +245,24 @@ def _compute_state_and_forecast(
     forecast_points: Dict[str, ForecastPoint] = {}
     conv_risks: Dict[str, float] = {}
 
+    last_m = visits[-1].month if visits else 0
+    d_base = None
+    if baseline_date:
+        try:
+            d_base = datetime.strptime(baseline_date, "%Y-%m-%d").date()
+        except Exception:
+            d_base = None
+
     for h, p in raw_fc.items():
         sub_probs = StageProbs(**p["stage_probs"]) if "stage_probs" in p else stage_probs
+        fc_month = last_m + int(h)
+        fc_date = None
+        if d_base:
+            fc_date = (d_base + timedelta(days=round(fc_month * 30.44))).strftime("%Y-%m-%d")
+
         forecast_points[h] = ForecastPoint(
+            month=fc_month,
+            date=fc_date,
             MMSE_mean=p.get("MMSE_mean"),
             MMSE_lo=p.get("MMSE_lo"),
             MMSE_hi=p.get("MMSE_hi"),
@@ -246,7 +295,7 @@ def _compute_state_and_forecast(
     elif latest_visit.get("MMSE") is not None:
         rate_of_decline = {"MMSE_per_year": -1.2, "vs_cohort_percentile": 55}
 
-    return TwinState(
+    state = TwinState(
         stage_probs=stage_probs,
         stage=stage_res["stage"],
         confidence=stage_res["confidence"],
@@ -255,12 +304,18 @@ def _compute_state_and_forecast(
         conversion_risk=conv_risks if conv_risks else {"12m": 0.25, "24m": 0.45},
         rate_of_decline=rate_of_decline,
         shap_drivers=stage_res.get("shap_top5", []),
+        fusion=None,
+        scope_warnings=[],
+        forecast_reliability="ok",
     )
+    return _apply_mri_fusion_if_present(state, modalities)
 
 
 def create_twin(req: CreateTwinRequest) -> TwinFull:
     twin_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    baseline_date = req.baseline_date or now_dt.strftime("%Y-%m-%d")
 
     # 1. Demographics parsing (nested or flat)
     age = 70.0
@@ -309,12 +364,23 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
     # Baseline visit at month 0
     base_visit = VisitRecord(
         month=0,
+        exam_date=baseline_date,
+        age=age,
         MMSE=latest_dict.get("MMSE"),
         CDGLOBAL=latest_dict.get("CDGLOBAL"),
         TOTSCORE=latest_dict.get("TOTSCORE"),
         source="user"
     )
-    visits = req.visits or req.initial_visits or [base_visit]
+    raw_visits = req.visits or req.initial_visits or [base_visit]
+    visits = []
+    for v in raw_visits:
+        v_dict = v.model_dump()
+        if v_dict.get("exam_date") is None:
+            v_dict["exam_date"] = baseline_date
+        if v_dict.get("age") is None:
+            v_dict["age"] = age
+        visits.append(VisitRecord(**v_dict))
+    visits.sort(key=lambda v: v.month)
 
     # 3. Biomarkers parsing
     bio_payload = req.biomarkers
@@ -373,7 +439,6 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
             print(f"[create_twin] Kaggle lifestyle prediction skipped: {e}")
 
     # If ABETA, TAU, and APVOLUME are given, run allele ensemble (/alele model)
-    # Important: APVOLUME is kept separate from FreeSurfer hippocampus.
     if abeta is not None and tau is not None and apvol is not None:
         try:
             from ml.alele_model.final_run import predict_patient_risk
@@ -396,19 +461,38 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
             print(f"[create_twin] Allele ensemble prediction skipped: {e}")
 
     # 5. Model A + B inference
-    state = _compute_state_and_forecast(demographics, latest_dict, visits, modalities)
+    state = _compute_state_and_forecast(demographics, latest_dict, visits, modalities, baseline_date)
+
+    baseline_snapshot = {
+        "inputs": {
+            "demographics": dict(demographics),
+            "scores": dict(latest_dict),
+            "biomarkers": bio_payload.model_dump(exclude_none=True) if bio_payload else {},
+            "mri_volumes": req.mri_volumes.model_dump(exclude_none=True) if req.mri_volumes else {},
+            "baseline_date": baseline_date,
+        },
+        "attached_modalities": {k: v.model_dump() for k, v in modalities.items()},
+        "stage": state.model_dump(),
+        "forecast": {h: p.model_dump() for h, p in state.forecast.items()},
+        "lifestyle": dict(req.lifestyle) if req.lifestyle else {},
+        "visits": [v.model_dump() for v in visits],
+    }
 
     twin = TwinFull(
         twin_id=twin_id,
         name=req.name or req.persona_label,
         is_synthetic=req.is_synthetic,
         persona_label=req.persona_label or f"Patient ({state.stage} Stage)",
+        baseline_date=baseline_date,
+        baseline_snapshot=baseline_snapshot,
         demographics=demographics,
         modalities=modalities,
         visits=visits,
+        scenarios=[],
         state=state,
         history=[
             HistoryEvent(
+                recorded_at=now,
                 timestamp=now,
                 stage_probs=state.stage_probs,
                 event="twin_created",
@@ -425,9 +509,50 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
 def add_visit(twin_id: str, req: AddVisitRequest) -> Tuple[TwinFull, Dict[str, float]]:
     twin = get_twin(twin_id)
     prev_probs = twin.state.stage_probs
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    today_date = now_dt.date()
+
+    b_date_str = twin.baseline_date or today_date.strftime("%Y-%m-%d")
+    try:
+        d_base = datetime.strptime(b_date_str, "%Y-%m-%d").date()
+    except Exception:
+        d_base = today_date
+
+    # Determine exam_date and month
+    if req.exam_date:
+        try:
+            d_exam = datetime.strptime(req.exam_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="exam_date must be in YYYY-MM-DD format.")
+
+        # Reject future dates for observed visits
+        if (req.DX_obs is not None or req.source != "synthetic") and d_exam > today_date:
+            raise HTTPException(
+                status_code=422,
+                detail=f"exam_date {req.exam_date} cannot be in the future for observed visits (today is {today_date})."
+            )
+
+        diff_days = (d_exam - d_base).days
+        month = max(0, round(diff_days / 30.44))
+        exam_date_str = req.exam_date
+    elif req.month is not None:
+        month = req.month
+        d_exam = d_base + timedelta(days=round(month * 30.44))
+        exam_date_str = d_exam.strftime("%Y-%m-%d")
+    else:
+        d_exam = today_date
+        diff_days = (d_exam - d_base).days
+        month = max(0, round(diff_days / 30.44))
+        exam_date_str = d_exam.strftime("%Y-%m-%d")
+
+    baseline_age = float(twin.demographics.get("age", 70.0))
+    derived_age = round(baseline_age + (d_exam - d_base).days / 365.25, 2)
 
     new_visit = VisitRecord(
-        month=req.month,
+        month=month,
+        exam_date=exam_date_str,
+        age=derived_age,
         MMSE=req.MMSE,
         CDGLOBAL=req.CDGLOBAL,
         TOTSCORE=req.TOTSCORE,
@@ -450,7 +575,7 @@ def add_visit(twin_id: str, req: AddVisitRequest) -> Tuple[TwinFull, Dict[str, f
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_visit_dict, twin.visits, twin.modalities
+        twin.demographics, latest_visit_dict, twin.visits, twin.modalities, twin.baseline_date
     )
     twin.state = new_state
 
@@ -462,10 +587,11 @@ def add_visit(twin_id: str, req: AddVisitRequest) -> Tuple[TwinFull, Dict[str, f
 
     twin.history.append(
         HistoryEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            recorded_at=now_iso,
+            timestamp=now_iso,
             stage_probs=new_state.stage_probs,
-            event=f"visit_added_m{req.month}",
-            prob_diff={"CN": diff_cn, "MCI": diff_mci, "AD": diff_ad}
+            event=f"visit_added_m{month}",
+            prob_diff=prob_diff
         )
     )
 
@@ -495,7 +621,7 @@ def attach_biomarkers(twin_id: str, payload: BiomarkersPayload) -> Tuple[TwinFul
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
     )
     twin.state = new_state
 
@@ -504,12 +630,14 @@ def attach_biomarkers(twin_id: str, payload: BiomarkersPayload) -> Tuple[TwinFul
     diff_ad  = round(new_state.stage_probs.AD - prev_probs.AD, 4)
     prob_diff = {"CN": diff_cn, "MCI": diff_mci, "AD": diff_ad}
 
+    now = datetime.now(timezone.utc).isoformat()
     twin.history.append(
         HistoryEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            recorded_at=now,
+            timestamp=now,
             stage_probs=new_state.stage_probs,
             event="biomarkers_attached",
-            prob_diff={"CN": diff_cn, "MCI": diff_mci, "AD": diff_ad}
+            prob_diff=prob_diff
         )
     )
 
@@ -534,7 +662,7 @@ def attach_mri_volumes(twin_id: str, payload: MRIVolumesPayload) -> Tuple[TwinFu
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
     )
     twin.state = new_state
 
@@ -543,17 +671,53 @@ def attach_mri_volumes(twin_id: str, payload: MRIVolumesPayload) -> Tuple[TwinFu
     diff_ad  = round(new_state.stage_probs.AD - prev_probs.AD, 4)
     prob_diff = {"CN": diff_cn, "MCI": diff_mci, "AD": diff_ad}
 
+    now = datetime.now(timezone.utc).isoformat()
     twin.history.append(
         HistoryEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            recorded_at=now,
+            timestamp=now,
             stage_probs=new_state.stage_probs,
             event="mri_volumes_attached",
-            prob_diff={"CN": diff_cn, "MCI": diff_mci, "AD": diff_ad}
+            prob_diff=prob_diff
         )
     )
 
     _save_twin_to_disk(twin)
     return twin, prob_diff
+
+
+def attach_mri_image(twin_id: str, image_bytes: bytes) -> Tuple[Dict[str, Any], TwinFull]:
+    from ml.image_model.final_run import predict_mri_image
+    twin = get_twin(twin_id)
+    mri_res = predict_mri_image(image_bytes)
+
+    # Attach to modalities (no demo_only flags)
+    twin.modalities["mri_image"] = ModalityStatus(
+        present=True,
+        latest=mri_res
+    )
+
+    prev_probs = twin.state.stage_probs
+    # Apply fusion
+    twin.state = _apply_mri_fusion_if_present(twin.state, twin.modalities)
+
+    now = datetime.now(timezone.utc).isoformat()
+    twin.history.append(
+        HistoryEvent(
+            recorded_at=now,
+            timestamp=now,
+            stage_probs=twin.state.stage_probs,
+            event="mri_image_attached",
+            prob_diff={
+                "CN": round(twin.state.stage_probs.CN - prev_probs.CN, 4),
+                "MCI": round(twin.state.stage_probs.MCI - prev_probs.MCI, 4),
+                "AD": round(twin.state.stage_probs.AD - prev_probs.AD, 4),
+            }
+        )
+    )
+
+    _save_twin_to_disk(twin)
+    return mri_res, twin
 
 
 def simulate_intervention(twin_id: str, decline_multiplier: float) -> SimulateResponse:
@@ -755,12 +919,14 @@ def undo_last_visit(twin_id: str) -> TwinFull:
     )
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
     )
     twin.state = new_state
+    now = datetime.now(timezone.utc).isoformat()
     twin.history.append(
         HistoryEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            recorded_at=now,
+            timestamp=now,
             stage_probs=new_state.stage_probs,
             event=f"visit_undone_m{removed.month}",
             prob_diff=None
@@ -771,30 +937,42 @@ def undo_last_visit(twin_id: str) -> TwinFull:
 
 
 def reset_twin(twin_id: str) -> TwinFull:
-    """Reset twin back to month 0 baseline state, removing all subsequent visits."""
+    """Reset twin back to baseline state, removing subsequent visits and scenarios."""
     twin = get_twin(twin_id)
-    baseline_visit = twin.visits[0] if twin.visits else VisitRecord(month=0)
-    twin.visits = [baseline_visit]
+    now = datetime.now(timezone.utc).isoformat()
+    if twin.baseline_snapshot:
+        snap = twin.baseline_snapshot
+        twin.demographics = dict(snap.get("inputs", {}).get("demographics", twin.demographics))
+        restored_modalities = {}
+        for k, v in snap.get("attached_modalities", {}).items():
+            restored_modalities[k] = ModalityStatus(**v)
+        twin.modalities = restored_modalities
+        twin.visits = [VisitRecord(**v) for v in snap.get("visits", [])]
+        twin.scenarios = []
+        twin.state = TwinState(**snap["stage"])
+    else:
+        baseline_visit = twin.visits[0] if twin.visits else VisitRecord(month=0, exam_date=twin.baseline_date)
+        twin.visits = [baseline_visit]
+        twin.scenarios = []
+        latest_dict = {
+            "MMSE": baseline_visit.MMSE,
+            "CDGLOBAL": baseline_visit.CDGLOBAL,
+            "TOTSCORE": baseline_visit.TOTSCORE,
+        }
+        twin.modalities["basic_scores"] = ModalityStatus(
+            present=any(v is not None for v in [baseline_visit.MMSE, baseline_visit.CDGLOBAL, baseline_visit.TOTSCORE]),
+            latest={"MMSE": baseline_visit.MMSE, "CDGLOBAL": baseline_visit.CDGLOBAL, "TOTSCORE": baseline_visit.TOTSCORE}
+        )
+        twin.state = _compute_state_and_forecast(
+            twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
+        )
 
-    latest_dict = {
-        "MMSE": baseline_visit.MMSE,
-        "CDGLOBAL": baseline_visit.CDGLOBAL,
-        "TOTSCORE": baseline_visit.TOTSCORE,
-    }
-    twin.modalities["basic_scores"] = ModalityStatus(
-        present=any(v is not None for v in [baseline_visit.MMSE, baseline_visit.CDGLOBAL, baseline_visit.TOTSCORE]),
-        latest={"MMSE": baseline_visit.MMSE, "CDGLOBAL": baseline_visit.CDGLOBAL, "TOTSCORE": baseline_visit.TOTSCORE}
-    )
-
-    new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities
-    )
-    twin.state = new_state
     twin.history.append(
         HistoryEvent(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            stage_probs=new_state.stage_probs,
-            event="twin_reset_to_baseline",
+            recorded_at=now,
+            timestamp=now,
+            stage_probs=twin.state.stage_probs,
+            event="reset",
             prob_diff=None
         )
     )

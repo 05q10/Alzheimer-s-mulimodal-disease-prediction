@@ -19,6 +19,8 @@ class StageProbs(BaseModel):
 
 
 class ForecastPoint(BaseModel):
+    month: Optional[int] = None
+    date: Optional[str] = None          # Calendar date YYYY-MM-DD
     MMSE_mean: Optional[float] = None
     MMSE_lo: Optional[float] = None     # 5th percentile
     MMSE_hi: Optional[float] = None     # 95th percentile
@@ -34,6 +36,8 @@ class ForecastPoint(BaseModel):
 
 class VisitRecord(BaseModel):
     month: int = Field(ge=0, description="Months since baseline")
+    exam_date: Optional[str] = Field(None, description="Observed date YYYY-MM-DD")
+    age: Optional[float] = Field(None, description="Derived patient age at this visit")
     MMSE: Optional[float] = Field(None, ge=0, le=30)
     CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
     TOTSCORE: Optional[float] = Field(None, ge=0, le=70,
@@ -63,23 +67,30 @@ class TwinState(BaseModel):
     )
     rate_of_decline: Optional[Dict[str, Any]] = None
     shap_drivers: Optional[List[Dict[str, Any]]] = None
+    fusion: Optional[Dict[str, Any]] = None
+    scope_warnings: Optional[List[str]] = Field(default_factory=list)
+    forecast_reliability: Optional[Literal["ok", "low"]] = "ok"
 
 
 class HistoryEvent(BaseModel):
-    timestamp: str
+    recorded_at: str
+    timestamp: Optional[str] = None
     stage_probs: StageProbs
-    event: str   # e.g. "visit_added", "modality_attached", "twin_created"
+    event: str   # e.g. "visit_added", "modality_attached", "twin_created", "reset"
     prob_diff: Optional[Dict[str, float]] = None
 
 
 class TwinFull(BaseModel):
     twin_id: str
     name: Optional[str] = None
-    is_synthetic: bool
+    is_synthetic: bool = False
     persona_label: Optional[str] = None     # e.g. "CN→MCI Converter"
+    baseline_date: Optional[str] = None
+    baseline_snapshot: Optional[Dict[str, Any]] = None
     demographics: Dict[str, Any]
     modalities: Dict[str, ModalityStatus]
     visits: List[VisitRecord]
+    scenarios: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     state: TwinState
     history: List[HistoryEvent]
 
@@ -127,6 +138,7 @@ class MRIVolumesPayload(BaseModel):
 class CreateTwinRequest(BaseModel):
     """POST /twin — supports both patient-builder nested shape and flat legacy shape."""
     name: Optional[str] = None
+    baseline_date: Optional[str] = None   # YYYY-MM-DD
 
     # Patient-builder nested structures
     demographics: Optional[DemographicsInput] = None
@@ -157,7 +169,8 @@ class CreateTwinRequest(BaseModel):
 
 class AddVisitRequest(BaseModel):
     """POST /twin/{id}/visit"""
-    month: int = Field(ge=0)
+    month: Optional[int] = Field(None, ge=0)
+    exam_date: Optional[str] = None   # YYYY-MM-DD
     MMSE: Optional[float] = Field(None, ge=0, le=30)
     CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
     TOTSCORE: Optional[float] = Field(None, ge=0, le=70)
@@ -169,6 +182,11 @@ class AddVisitResponse(BaseModel):
     twin_id: str
     state: TwinState
     prob_diff: Dict[str, float]   # new_prob - old_prob per class
+
+
+class MRIUploadResponse(BaseModel):
+    mri: Dict[str, Any]
+    state: TwinState
 
 
 class ScenarioRequest(BaseModel):

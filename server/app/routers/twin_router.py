@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from app.models.twin_models import (
     CreateTwinRequest, TwinFull, TwinState, StageProbs,
     ForecastPoint, VisitRecord, ModalityStatus, HistoryEvent,
-    AddVisitRequest, AddVisitResponse,
+    AddVisitRequest, AddVisitResponse, MRIUploadResponse,
     BiomarkersPayload, MRIVolumesPayload,
     SimulateRequest, SimulateResponse,
     ScenarioRequest, ScenarioResponse,
@@ -28,6 +28,7 @@ from app.twin import (
     add_visit as svc_add_visit,
     attach_biomarkers as svc_attach_biomarkers,
     attach_mri_volumes as svc_attach_mri_volumes,
+    attach_mri_image as svc_attach_mri_image,
     simulate_intervention as svc_simulate,
     run_scenario as svc_run_scenario,
     undo_last_visit as svc_undo_last_visit,
@@ -93,6 +94,22 @@ def attach_mri_volumes_route(twin_id: str, payload: MRIVolumesPayload):
     return twin
 
 
+@router.post("/twin/{twin_id}/mri-image", response_model=MRIUploadResponse,
+             summary="Upload structural MRI slice and fuse with clinical stager")
+async def upload_mri_image_route(twin_id: str, file: UploadFile = File(...)):
+    """
+    Accepts multipart field 'file', runs temperature-scaled ResNet34,
+    applies linear late fusion with ADNI stage probabilities, and updates twin state.
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="No file provided in multipart 'file' field.")
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+    mri_res, twin = svc_attach_mri_image(twin_id, file_bytes)
+    return MRIUploadResponse(mri=mri_res, state=twin.state)
+
+
 @router.post("/twin/{twin_id}/modality/{modality_name}", response_model=TwinFull,
              summary="Attach an optional modality to the twin")
 async def attach_modality_route(twin_id: str, modality_name: str,
@@ -107,17 +124,8 @@ async def attach_modality_route(twin_id: str, modality_name: str,
         twin, _ = svc_attach_mri_volumes(twin_id, payload_mri)
         return twin
     elif modality_name == "mri_image" and file:
-        twin = svc_get_twin(twin_id)
-        twin.modalities["mri_image"] = ModalityStatus(
-            present=True,
-            latest={
-                "resnet_stage": "VeryMild",
-                "resnet_probs": {"NonDemented": 0.12, "VeryMild": 0.63, "Mild": 0.20, "Moderate": 0.05},
-                "fused_stage": "MCI",
-                "fusion_note": "demo-only, not validated on ADNI",
-                "disclaimer": FUSION_DISCLAIMER
-            }
-        )
+        file_bytes = await file.read()
+        mri_res, twin = svc_attach_mri_image(twin_id, file_bytes)
         return twin
     elif modality_name == "ocr_report" and file:
         twin = svc_get_twin(twin_id)
@@ -227,9 +235,7 @@ def get_model_card():
             "MRI volumetric findings (clarifying borderline MCI vs mild AD): possible explanation, not tested in this observational analysis.",
         ],
         resnet_disclaimer=(
-            "The ResNet-50 MRI model was trained on a non-ADNI Kaggle Alzheimer's dataset. "
-            "It has NOT been validated on ADNI. Accuracy on ADNI data is unknown. "
-            "Demo use only."
+            "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2."
         ),
         fusion_disclaimer=FUSION_DISCLAIMER,
         data_provenance={
