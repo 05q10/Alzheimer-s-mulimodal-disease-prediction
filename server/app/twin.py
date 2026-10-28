@@ -170,6 +170,7 @@ def _compute_state_and_forecast(
     visits: List[VisitRecord],
     modalities: Dict[str, ModalityStatus],
     baseline_date: Optional[str] = None,
+    lifestyle: Optional[Dict[str, Any]] = None,
 ) -> TwinState:
     """Run Model A (staging) and Model B (progression) from latest patient features."""
     stager = get_stager()
@@ -231,7 +232,7 @@ def _compute_state_and_forecast(
         if m.get("whole_brain") and icv and icv > 0:
             inputs["whole_brain_norm"] = float(m["whole_brain"]) / float(icv)
 
-    # 1. Model A: Staging prediction
+    # 1. Model A: Staging prediction (lifestyle NEVER affects current stage)
     stage_res = stager.predict_one(inputs)
     probs_dict = stage_res["probs"]
     stage_probs = StageProbs(
@@ -279,6 +280,49 @@ def _compute_state_and_forecast(
         )
         if h in ["12", "24"]:
             conv_risks[f"{h}m"] = p.get("conversion_prob", 0.0)
+
+    # 2b. Apply literature-grounded lifestyle modifier (if provided)
+    if lifestyle:
+        from ml.twin.risk_modifier import compute_lifestyle_modifier
+        l_mod = compute_lifestyle_modifier(lifestyle)
+        l_mult = l_mod["decline_multiplier"]
+        l_haz = l_mod["hazard_multiplier"]
+
+        if l_mult != 1.0 or l_haz != 1.0:
+            cur_m = float(latest_visit.get("MMSE") if latest_visit.get("MMSE") is not None else 26.0)
+            cur_c = float(latest_visit.get("CDGLOBAL") if latest_visit.get("CDGLOBAL") is not None else 0.5)
+            cur_t = float(latest_visit.get("TOTSCORE") if latest_visit.get("TOTSCORE") is not None else 12.0)
+
+            for h_k, pt in forecast_points.items():
+                # MMSE: lower is worse
+                if pt.MMSE_mean is not None:
+                    d_m = pt.MMSE_mean - cur_m
+                    scaled_d_m = d_m * l_mult if d_m < 0 else d_m / l_mult
+                    pt.MMSE_mean = round(max(0.0, min(30.0, cur_m + scaled_d_m)), 1)
+                    pt.MMSE_lo = round(max(0.0, pt.MMSE_lo + (scaled_d_m - d_m)), 1)
+                    pt.MMSE_hi = round(min(30.0, pt.MMSE_hi + (scaled_d_m - d_m)), 1)
+
+                # CDGLOBAL: higher is worse
+                if pt.CDGLOBAL_mean is not None:
+                    d_c = pt.CDGLOBAL_mean - cur_c
+                    scaled_d_c = d_c * l_mult if d_c > 0 else d_c / l_mult
+                    pt.CDGLOBAL_mean = round(max(0.0, min(3.0, cur_c + scaled_d_c)), 2)
+                    pt.CDGLOBAL_lo = round(max(0.0, pt.CDGLOBAL_lo + (scaled_d_c - d_c)), 2)
+                    pt.CDGLOBAL_hi = round(min(3.0, pt.CDGLOBAL_hi + (scaled_d_c - d_c)), 2)
+
+                # TOTSCORE: higher is worse
+                if pt.TOTSCORE_mean is not None:
+                    d_t = pt.TOTSCORE_mean - cur_t
+                    scaled_d_t = d_t * l_mult if d_t > 0 else d_t / l_mult
+                    pt.TOTSCORE_mean = round(max(0.0, min(70.0, cur_t + scaled_d_t)), 1)
+                    pt.TOTSCORE_lo = round(max(0.0, pt.TOTSCORE_lo + (scaled_d_t - d_t)), 1)
+                    pt.TOTSCORE_hi = round(min(70.0, pt.TOTSCORE_hi + (scaled_d_t - d_t)), 1)
+
+                # Hazard probability
+                if pt.conversion_prob is not None:
+                    pt.conversion_prob = round(max(0.0, min(1.0, pt.conversion_prob * l_haz)), 4)
+                    if h_k in ["12", "24"]:
+                        conv_risks[f"{h_k}m"] = pt.conversion_prob
 
     # 3. Rate of decline across visits
     rate_of_decline = None
@@ -479,7 +523,7 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
             print(f"[create_twin] Allele ensemble prediction skipped: {e}")
 
     # 5. Model A + B inference
-    state = _compute_state_and_forecast(demographics, latest_dict, visits, modalities, baseline_date)
+    state = _compute_state_and_forecast(demographics, latest_dict, visits, modalities, baseline_date, req.lifestyle)
 
     baseline_snapshot = {
         "inputs": {
@@ -504,6 +548,7 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
         baseline_date=baseline_date,
         baseline_snapshot=baseline_snapshot,
         demographics=demographics,
+        lifestyle=req.lifestyle,
         modalities=modalities,
         visits=visits,
         scenarios=[],
@@ -593,7 +638,7 @@ def add_visit(twin_id: str, req: AddVisitRequest) -> Tuple[TwinFull, Dict[str, f
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_visit_dict, twin.visits, twin.modalities, twin.baseline_date
+        twin.demographics, latest_visit_dict, twin.visits, twin.modalities, twin.baseline_date, twin.lifestyle
     )
     twin.state = new_state
 
@@ -639,7 +684,7 @@ def attach_biomarkers(twin_id: str, payload: BiomarkersPayload) -> Tuple[TwinFul
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date, twin.lifestyle
     )
     twin.state = new_state
 
@@ -680,7 +725,7 @@ def attach_mri_volumes(twin_id: str, payload: MRIVolumesPayload) -> Tuple[TwinFu
     }
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date, twin.lifestyle
     )
     twin.state = new_state
 
@@ -851,9 +896,13 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
         horizon_months=req.horizon_months,
     )
 
-    # 4. Compute scenario state and forecast
+    # 4. Compute scenario state and forecast with lifestyle override
+    effective_lifestyle = dict(twin.lifestyle or {})
+    if req.lifestyle:
+        effective_lifestyle.update(req.lifestyle)
+
     scen_state = _compute_state_and_forecast(
-        twin.demographics, hypo_latest, hypo_visits, hypo_modalities
+        twin.demographics, hypo_latest, hypo_visits, hypo_modalities, twin.baseline_date, effective_lifestyle
     )
 
     decline_mult = req.decline_multiplier if req.decline_multiplier is not None else 1.0
@@ -972,7 +1021,7 @@ def undo_last_visit(twin_id: str) -> TwinFull:
     )
 
     new_state = _compute_state_and_forecast(
-        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date
+        twin.demographics, latest_dict, twin.visits, twin.modalities, twin.baseline_date, twin.lifestyle
     )
     twin.state = new_state
     now = datetime.now(timezone.utc).isoformat()
@@ -1002,6 +1051,7 @@ def reset_twin(twin_id: str) -> TwinFull:
         twin.modalities = restored_modalities
         twin.visits = [VisitRecord(**v) for v in snap.get("visits", [])]
         twin.scenarios = []
+        twin.lifestyle = dict(snap.get("lifestyle", {})) if snap.get("lifestyle") else None
         twin.state = TwinState(**snap["stage"])
     else:
         baseline_visit = twin.visits[0] if twin.visits else VisitRecord(month=0, exam_date=twin.baseline_date)

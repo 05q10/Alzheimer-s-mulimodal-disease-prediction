@@ -260,7 +260,14 @@ Returns held-out test metrics, valid clinical bounds and scopes, limitations lis
   },
   "limitations": [ ... ],
   "resnet_disclaimer": "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2.",
-  "fusion_disclaimer": "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2."
+  "fusion_disclaimer": "Image model trained on a Kaggle MRI dataset (not ADNI); fused at weight 0.2.",
+  "lifestyle_modifier": {
+    "status": "literature-informed prior, not learned from ADNI",
+    "hard_cap": [0.85, 1.35],
+    "shrinkage_power": 0.5,
+    "source": "Lancet Commission on Dementia Prevention, Intervention, and Care (Livingston et al., 2020, 2024 updates)",
+    "note": "Transparently modifies predicted decline and conversion hazard; never modifies current clinical stage."
+  }
 }
 ```
 

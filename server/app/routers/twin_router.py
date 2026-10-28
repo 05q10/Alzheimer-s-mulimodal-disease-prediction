@@ -252,4 +252,11 @@ def get_model_card():
             "splits": "Stratified group split by subject on baseline DX + conversion status (70% train, 15% val, 15% test)",
             "no_future_leakage": "Enforced: strictly backward temporal joins, no full-history aggregates as features.",
         },
+        lifestyle_modifier={
+            "status": "literature-informed prior, not learned from ADNI",
+            "hard_cap": [0.85, 1.35],
+            "shrinkage_power": 0.5,
+            "source": "Lancet Commission on Dementia Prevention, Intervention, and Care (Livingston et al., 2020, 2024 updates)",
+            "note": "Transparently modifies predicted decline and conversion hazard; never modifies current clinical stage.",
+        },
     )

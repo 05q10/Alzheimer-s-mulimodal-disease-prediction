@@ -88,6 +88,7 @@ class TwinFull(BaseModel):
     baseline_date: Optional[str] = None
     baseline_snapshot: Optional[Dict[str, Any]] = None
     demographics: Dict[str, Any]
+    lifestyle: Optional[Dict[str, Any]] = None
     modalities: Dict[str, ModalityStatus]
     visits: List[VisitRecord]
     scenarios: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
@@ -195,6 +196,7 @@ class ScenarioRequest(BaseModel):
     hypothetical_visit: Optional[Dict[str, Optional[float]]] = None
     biomarkers: Optional[BiomarkersPayload] = None
     mri_volumes: Optional[MRIVolumesPayload] = None
+    lifestyle: Optional[Dict[str, Any]] = None
     decline_multiplier: Optional[float] = 1.0
 
 
@@ -250,3 +252,4 @@ class ModelCardMetrics(BaseModel):
     resnet_disclaimer: str
     fusion_disclaimer: str
     data_provenance: Dict[str, Any]
+    lifestyle_modifier: Optional[Dict[str, Any]] = None

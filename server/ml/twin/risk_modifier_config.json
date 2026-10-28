@@ -1,0 +1,123 @@
+{
+  "source": "Lancet Commission on Dementia Prevention, Intervention, and Care (Livingston et al., 2020, 2024 updates)",
+  "provenance_note": "literature-informed prior, not learned from ADNI",
+  "hard_cap": [0.85, 1.35],
+  "shrinkage_power": 0.5,
+  "factors": {
+    "smoking": {
+      "label": "Smoking status",
+      "citation": "Lancet Commission (2020/2024): Current smoking pooled RR=1.59 (95% CI 1.15-2.20).",
+      "mapping": {
+        "1": 1.59,
+        "true": 1.59,
+        "current": 1.59,
+        "former": 1.10,
+        "0": 1.00,
+        "false": 1.00,
+        "never": 1.00
+      }
+    },
+    "physical_activity": {
+      "label": "Physical activity",
+      "citation": "Lancet Commission (2020/2024): Physical inactivity pooled RR=1.39 (95% CI 1.14-1.69). Active lifestyle RR=0.85.",
+      "mapping": {
+        "1": 1.39,
+        "sedentary": 1.39,
+        "low": 1.25,
+        "2": 1.15,
+        "3": 1.00,
+        "moderate": 1.00,
+        "4": 0.92,
+        "5": 0.85,
+        "high": 0.85
+      }
+    },
+    "alcohol": {
+      "label": "Alcohol consumption",
+      "citation": "Lancet Commission (2020/2024): Excessive alcohol (>21 units/week) pooled RR=1.19 (95% CI 1.01-1.40). Moderate/none RR=1.0.",
+      "thresholds": [
+        {"max_units": 14, "rr": 1.00, "desc": "Light/moderate alcohol (<=14 units/wk)"},
+        {"max_units": 21, "rr": 1.08, "desc": "Moderate-high alcohol (15-21 units/wk)"},
+        {"max_units": 999, "rr": 1.19, "desc": "Excessive alcohol (>21 units/wk)"}
+      ]
+    },
+    "diet_quality": {
+      "label": "Diet quality",
+      "citation": "Morris et al. (Alzheimers Dement 2015); Lancet Commission 2024: Mediterranean/MIND diet RR=0.88; low-quality diet RR=1.20.",
+      "mapping": {
+        "1": 1.20,
+        "poor": 1.20,
+        "2": 1.10,
+        "3": 1.00,
+        "average": 1.00,
+        "4": 0.94,
+        "5": 0.88,
+        "high": 0.88
+      }
+    },
+    "sleep_quality": {
+      "label": "Sleep quality",
+      "citation": "Bubu et al. (Sleep 2017); Lancet Commission 2024: Sleep disturbance and chronic insomnia RR=1.25 (95% CI 1.08-1.45).",
+      "mapping": {
+        "1": 1.25,
+        "poor": 1.25,
+        "2": 1.12,
+        "3": 1.00,
+        "average": 1.00,
+        "4": 0.98,
+        "5": 0.95,
+        "high": 0.95
+      }
+    },
+    "hypertension": {
+      "label": "Hypertension",
+      "citation": "Lancet Commission (2020/2024): Midlife hypertension (systolic >= 140 mmHg) pooled RR=1.61 (95% CI 1.17-2.22).",
+      "mapping": {
+        "1": 1.61,
+        "true": 1.61,
+        "0": 1.00,
+        "false": 1.00
+      }
+    },
+    "diabetes": {
+      "label": "Type 2 Diabetes",
+      "citation": "Lancet Commission (2020/2024): Type 2 diabetes pooled RR=1.52 (95% CI 1.18-1.96).",
+      "mapping": {
+        "1": 1.52,
+        "true": 1.52,
+        "0": 1.00,
+        "false": 1.00
+      }
+    },
+    "depression": {
+      "label": "Depression",
+      "citation": "Lancet Commission (2020/2024): Late-life depression pooled RR=1.91 (95% CI 1.51-2.42).",
+      "mapping": {
+        "1": 1.91,
+        "true": 1.91,
+        "0": 1.00,
+        "false": 1.00
+      }
+    },
+    "head_injury": {
+      "label": "Traumatic Brain Injury",
+      "citation": "Lancet Commission (2020/2024): Traumatic brain injury history pooled RR=1.78 (95% CI 1.29-2.46).",
+      "mapping": {
+        "1": 1.78,
+        "true": 1.78,
+        "0": 1.00,
+        "false": 1.00
+      }
+    },
+    "cardiovascular_disease": {
+      "label": "Cardiovascular disease",
+      "citation": "Newman et al. (2005); Lancet Commission 2024: Clinical cardiovascular disease history RR=1.28 (95% CI 1.05-1.56).",
+      "mapping": {
+        "1": 1.28,
+        "true": 1.28,
+        "0": 1.00,
+        "false": 1.00
+      }
+    }
+  }
+}
