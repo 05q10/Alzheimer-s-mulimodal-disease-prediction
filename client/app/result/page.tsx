@@ -9,6 +9,13 @@ export default function ResultPage() {
   const router = useRouter();
   const session = usePatientStore((s) => s.session);
 
+  React.useEffect(() => {
+    const twinId = (session as any)?.twinId || (session as any)?.twin?.twin_id;
+    if (twinId) {
+      router.push(`/twin/${twinId}`);
+    }
+  }, [session, router]);
+
   // Correct store references
   const baseResult = session?.baseModel ?? { prediction: "N/A", input_used: {} };
   const alleleResult = session?.alleleResult ?? {
@@ -309,16 +316,25 @@ export default function ResultPage() {
               </div>
 
               {/* Actions */}
-              <div className="mt-6 flex gap-3">
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => router.push(`/twin/${session?.twinId || "demo-cn-mci"}`)}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:brightness-110 transition font-bold shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Open Trajectory Dashboard →</span>
+                </button>
+              </div>
+
+              <div className="mt-3 flex gap-3">
                 <button
                   onClick={downloadJSON}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:brightness-110 transition font-semibold"
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:brightness-110 transition font-semibold text-xs cursor-pointer"
                 >
                   Download Report JSON
                 </button>
                 <button
                   onClick={() => router.push("/intake")}
-                  className="flex-1 py-3 rounded-xl bg-slate-800 border border-cyan-500/12 hover:bg-slate-700 transition font-semibold"
+                  className="flex-1 py-3 rounded-xl bg-slate-800 border border-cyan-500/12 hover:bg-slate-700 transition font-semibold text-xs cursor-pointer"
                 >
                   New Patient
                 </button>

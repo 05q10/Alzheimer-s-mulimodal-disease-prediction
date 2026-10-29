@@ -8,7 +8,7 @@ Provides:
   - simulate_counterfactual(current_visit: dict, deltas: dict) -> dict
 """
 
-import json
+import json, math
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -173,16 +173,27 @@ class TwinProgression:
 
             out_m = (d_raw < p5_m or d_raw > p95_m)
             d_clamped = max(p5_m, min(p95_m, d_raw))
-            if out_m or any_input_out_of_range:
-                d_final = 0.5 * d_clamped + 0.5 * p50_m
-                u_mult_m = 1.5
-                any_unreliable = True
-                if out_m:
-                    scope_warnings.append(
-                        f"MMSE forecast change ({round(d_raw, 2)}) fell outside [{p5_m}, {p95_m}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_m})."
-                    )
+
+            # AD clinical envelope check:
+            # In ADNI, 75% of AD patients decline <= 4.0 points/year (p25 = -4.0, p50 = -2.0 at 12m).
+            # When CatBoost predicts steep decline steeper than p25, anchor to plausible ADNI rate.
+            p25_m = mmse_env.get("p25", p5_m)
+            if anchor_stage == "AD" and d_raw < p25_m:
+                d_final = 0.5 * max(p5_m, d_raw) + 0.5 * p50_m
+                scope_warnings.append(
+                    f"AD MMSE forecast decline ({round(d_raw, 2)}) fell outside ADNI interquartile range [{p25_m}, {p95_m}] for {anchor_stage}@{h}m; blended with median ({p50_m})."
+                )
             else:
                 d_final = d_clamped
+                if out_m:
+                    scope_warnings.append(
+                        f"MMSE forecast change ({round(d_raw, 2)}) fell outside [{p5_m}, {p95_m}] for {anchor_stage}@{h}m; clamped to [{p5_m}, {p95_m}]."
+                    )
+
+            if out_m or any_input_out_of_range:
+                u_mult_m = 1.5
+                any_unreliable = True
+            else:
                 u_mult_m = 1.0
 
             # Plausible constraint: impaired patient should not improve significantly
@@ -215,16 +226,15 @@ class TwinProgression:
 
             out_c = (round(d_cdg_raw, 2) < p5_c or round(d_cdg_raw, 2) > p95_c)
             d_cdg_clamped = max(p5_c, min(p95_c, d_cdg_raw))
+            d_cdg_final = d_cdg_clamped
             if out_c or any_input_out_of_range:
-                d_cdg_final = 0.5 * d_cdg_clamped + 0.5 * p50_c
                 u_mult_c = 1.5
                 any_unreliable = True
                 if out_c:
                     scope_warnings.append(
-                        f"CDGLOBAL forecast change ({round(d_cdg_raw, 2)}) fell outside [{p5_c}, {p95_c}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_c})."
+                        f"CDGLOBAL forecast change ({round(d_cdg_raw, 2)}) fell outside [{p5_c}, {p95_c}] for {anchor_stage}@{h}m; clamped to [{p5_c}, {p95_c}]."
                     )
             else:
-                d_cdg_final = d_cdg_clamped
                 u_mult_c = 1.0
 
             cdg_pred = max(0.0, min(3.0, curr_cdg + d_cdg_final))
@@ -248,16 +258,15 @@ class TwinProgression:
 
             out_t = (round(d_tot_raw, 2) < p5_t or round(d_tot_raw, 2) > p95_t)
             d_tot_clamped = max(p5_t, min(p95_t, d_tot_raw))
+            d_tot_final = d_tot_clamped
             if out_t or any_input_out_of_range:
-                d_tot_final = 0.5 * d_tot_clamped + 0.5 * p50_t
                 u_mult_t = 1.5
                 any_unreliable = True
                 if out_t:
                     scope_warnings.append(
-                        f"TOTSCORE forecast change ({round(d_tot_raw, 2)}) fell outside [{p5_t}, {p95_t}] for {anchor_stage}@{h}m; blended 50/50 with median ({p50_t})."
+                        f"TOTSCORE forecast change ({round(d_tot_raw, 2)}) fell outside [{p5_t}, {p95_t}] for {anchor_stage}@{h}m; clamped to [{p5_t}, {p95_t}]."
                     )
             else:
-                d_tot_final = d_tot_clamped
                 u_mult_t = 1.0
 
             tot_pred = max(0.0, min(70.0, curr_tot + d_tot_final))
@@ -265,28 +274,56 @@ class TwinProgression:
             tot_lo = max(0.0, round(tot_pred - 1.64 * tot_mae, 1))
             tot_hi = min(70.0, round(tot_pred + 1.64 * tot_mae, 1))
 
-            # ── 4. Conversion risk ────────────────────────────────────────
+            # ── 4. Conversion risk and progression risk ───────────────────
             conv_model = self.models_conv.get(h)
             conv_prob = 0.0
-            if conv_model:
+            if conv_model and anchor_stage != "AD":
                 try:
                     conv_prob = round(float(conv_model.predict_proba(X)[0, 1]), 4)
                 except Exception:
                     conv_prob = 0.0
 
-            # Stage probabilities estimated at future horizon
-            if current_probs:
-                p_cn = max(0.01, current_probs.get("CN", 0.3) * (1.0 - conv_prob * 0.7))
-                p_ad = min(0.95, current_probs.get("AD", 0.1) + conv_prob * 0.5)
-                p_mci = max(0.01, 1.0 - p_cn - p_ad)
-                tot_p = p_cn + p_mci + p_ad
-                stage_probs = {
-                    "CN": round(p_cn / tot_p, 4),
-                    "MCI": round(p_mci / tot_p, 4),
-                    "AD": round(p_ad / tot_p, 4),
-                }
+            # Progression risk for AD patients: probability of further drop >= 3 MMSE points
+            sigma_m = max(1.0, HORIZON_RESIDUAL_MAE.get(h, {}).get("MMSE", 1.5) * 1.25)
+            z_m = (-3.0 - d_final) / sigma_m
+            prog_risk = round(float(0.5 * (1.0 + math.erf(z_m / math.sqrt(2.0)))), 4)
+            prog_risk = max(0.05, min(0.98, prog_risk))
+
+            if anchor_stage == "AD":
+                headline_metric = "progression_risk"
+                headline_value = prog_risk
+                conv_prob = prog_risk
             else:
-                stage_probs = {"CN": 0.33, "MCI": 0.34, "AD": 0.33}
+                headline_metric = "conversion_risk"
+                headline_value = conv_prob
+
+            # Stage probabilities estimated at future horizon using Model A (TwinStager)
+            from ml.twin.stager import get_stager
+            try:
+                stager = get_stager()
+                fc_inputs = dict(patient_record)
+                fc_inputs["MMSE"] = round(mmse_pred, 1)
+                fc_inputs["CDGLOBAL"] = round(cdg_pred, 2)
+                fc_inputs["TOTSCORE"] = round(tot_pred, 1)
+                st_res = stager.predict_one(fc_inputs)
+                stage_probs = {
+                    "CN": round(float(st_res["probs"]["CN"]), 4),
+                    "MCI": round(float(st_res["probs"]["MCI"]), 4),
+                    "AD": round(float(st_res["probs"]["AD"]), 4),
+                }
+            except Exception:
+                if current_probs:
+                    p_cn = max(0.01, current_probs.get("CN", 0.3) * (1.0 - conv_prob * 0.7))
+                    p_ad = min(0.95, current_probs.get("AD", 0.1) + conv_prob * 0.5)
+                    p_mci = max(0.01, 1.0 - p_cn - p_ad)
+                    tot_p = p_cn + p_mci + p_ad
+                    stage_probs = {
+                        "CN": round(p_cn / tot_p, 4),
+                        "MCI": round(p_mci / tot_p, 4),
+                        "AD": round(p_ad / tot_p, 4),
+                    }
+                else:
+                    stage_probs = {"CN": 0.33, "MCI": 0.34, "AD": 0.33}
 
             forecast[str(h)] = {
                 "MMSE_mean": round(mmse_pred, 1),
@@ -300,6 +337,10 @@ class TwinProgression:
                 "TOTSCORE_hi": tot_hi,
                 "stage_probs": stage_probs,
                 "conversion_prob": conv_prob,
+                "progression_risk": prog_risk,
+                "headline_risk_metric": headline_metric,
+                "headline_risk_value": headline_value,
+                "p_ad_at_horizon": stage_probs["AD"],
             }
 
         forecast["forecast_reliability"] = "low" if any_unreliable else "ok"

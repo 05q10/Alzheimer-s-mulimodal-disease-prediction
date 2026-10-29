@@ -7,6 +7,7 @@ JSON persistence to server/data/twins/.
 """
 
 import json
+import math
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -25,7 +26,7 @@ from app.models.twin_models import (
     InputUsageItem, InputUsageResponse, TwinExplanationResponse,
 )
 from ml.twin.stager import get_stager
-from ml.twin.progression import get_progression
+from ml.twin.progression import get_progression, HORIZON_RESIDUAL_MAE
 from ml.twin.constants import MRI_FUSION_WEIGHT
 
 TWINS_DIR = Path(__file__).resolve().parent.parent / "data" / "twins"
@@ -455,6 +456,10 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
         MMSE=latest_dict.get("MMSE"),
         CDGLOBAL=latest_dict.get("CDGLOBAL"),
         TOTSCORE=latest_dict.get("TOTSCORE"),
+        FAQ=latest_dict.get("FAQTOTAL"),
+        FAQTOTAL=latest_dict.get("FAQTOTAL"),
+        MOCA=latest_dict.get("MOCA"),
+        CDRSB=latest_dict.get("CDRSB"),
         source="user"
     )
     raw_visits = req.visits or req.initial_visits or [base_visit]
@@ -870,21 +875,32 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
 
     # 1. Baseline state
     base_state = twin.state
+    base_anchor_stage = base_state.stage
     base_fc = base_state.forecast.get(h_str)
+    base_p_ad = base_fc.stage_probs.AD if (base_fc and base_fc.stage_probs) else base_state.stage_probs.AD
+    base_headline_metric = "p_ad_at_horizon"
+    base_headline_val = base_p_ad
+    base_prog_val = base_fc.conversion_prob if (base_fc and base_anchor_stage == "AD") else 0.0
+
+    base_conv_dict = {k: base_state.conversion_risk.get(k, 0.0) for k in ["12m", "24m"]}
+    if base_fc and base_fc.conversion_prob is not None:
+        base_conv_dict[f"{h_str}m"] = base_fc.conversion_prob
+
     baseline_payload = {
-        "stage_probs": base_state.stage_probs.model_dump(),
+        "stage_probs": base_fc.stage_probs.model_dump() if (base_fc and base_fc.stage_probs) else base_state.stage_probs.model_dump(),
+        "anchor_stage_probs": base_state.stage_probs.model_dump(),
         "forecast": {h_str: base_fc.model_dump()} if base_fc else {},
-        "conversion_risk": base_state.conversion_risk,
+        "conversion_risk": base_conv_dict,
+        "progression_risk": base_prog_val,
+        "p_ad_at_horizon": base_p_ad,
+        "headline_risk_metric": base_headline_metric,
+        "headline_risk_value": base_headline_val,
     }
 
-    # 2. Build hypothetical inputs
+    # 2. Build hypothetical inputs (preserving all anchor visit features)
     hypo_visits = [v.model_copy() for v in twin.visits]
     latest_v = hypo_visits[-1] if hypo_visits else VisitRecord(month=0)
-    hypo_latest: Dict[str, Any] = {
-        "MMSE": latest_v.MMSE,
-        "CDGLOBAL": latest_v.CDGLOBAL,
-        "TOTSCORE": latest_v.TOTSCORE,
-    }
+    hypo_latest: Dict[str, Any] = dict(latest_v.model_dump(exclude_none=True))
     if req.hypothetical_visit:
         for k, v in req.hypothetical_visit.items():
             if v is not None:
@@ -931,82 +947,202 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
 
     decline_mult = req.decline_multiplier if req.decline_multiplier is not None else 1.0
     scen_fc_points: Dict[str, ForecastPoint] = {}
+    cur_m = float(hypo_latest.get("MMSE") if hypo_latest.get("MMSE") is not None else 26.0)
+    cur_c = float(hypo_latest.get("CDGLOBAL") if hypo_latest.get("CDGLOBAL") is not None else 0.5)
+    cur_t = float(hypo_latest.get("TOTSCORE") if hypo_latest.get("TOTSCORE") is not None else 12.0)
+
     for h, pt in scen_state.forecast.items():
-        if decline_mult != 1.0:
-            # 1. MMSE (lower = worse)
-            if pt.MMSE_mean is not None:
-                cur_m = float(hypo_latest.get("MMSE") if hypo_latest.get("MMSE") is not None else 26.0)
-                d_m = pt.MMSE_mean - cur_m
-                scaled_d_m = d_m * decline_mult if d_m < 0 else d_m / decline_mult
-                new_mean = round(max(0.0, min(30.0, cur_m + scaled_d_m)), 1)
-                new_lo = round(max(0.0, pt.MMSE_lo + (scaled_d_m - d_m)), 1)
-                new_hi = round(min(30.0, pt.MMSE_hi + (scaled_d_m - d_m)), 1)
-            else:
-                new_mean, new_lo, new_hi = None, None, None
-
-            # 2. CDGLOBAL (higher = worse)
-            if pt.CDGLOBAL_mean is not None:
-                cur_c = float(hypo_latest.get("CDGLOBAL") if hypo_latest.get("CDGLOBAL") is not None else 0.5)
-                d_c = pt.CDGLOBAL_mean - cur_c
-                scaled_d_c = d_c * decline_mult if d_c > 0 else d_c / decline_mult
-                new_cdg = round(max(0.0, min(3.0, cur_c + scaled_d_c)), 2)
-                new_cdg_lo = round(max(0.0, pt.CDGLOBAL_lo + (scaled_d_c - d_c)), 2)
-                new_cdg_hi = round(min(3.0, pt.CDGLOBAL_hi + (scaled_d_c - d_c)), 2)
-            else:
-                new_cdg, new_cdg_lo, new_cdg_hi = None, None, None
-
-            # 3. TOTSCORE (higher = worse)
-            if pt.TOTSCORE_mean is not None:
-                cur_t = float(hypo_latest.get("TOTSCORE") if hypo_latest.get("TOTSCORE") is not None else 12.0)
-                d_t = pt.TOTSCORE_mean - cur_t
-                scaled_d_t = d_t * decline_mult if d_t > 0 else d_t / decline_mult
-                new_tot = round(max(0.0, min(70.0, cur_t + scaled_d_t)), 1)
-                new_tot_lo = round(max(0.0, pt.TOTSCORE_lo + (scaled_d_t - d_t)), 1)
-                new_tot_hi = round(min(70.0, pt.TOTSCORE_hi + (scaled_d_t - d_t)), 1)
-            else:
-                new_tot, new_tot_lo, new_tot_hi = None, None, None
-
-            conv = round(min(1.0, max(0.0, (pt.conversion_prob or 0.0) * decline_mult)), 4) if pt.conversion_prob else None
-
-            scen_fc_points[h] = ForecastPoint(
-                month=pt.month,
-                date=pt.date,
-                MMSE_mean=new_mean,
-                MMSE_lo=new_lo,
-                MMSE_hi=new_hi,
-                CDGLOBAL_mean=new_cdg,
-                CDGLOBAL_lo=new_cdg_lo,
-                CDGLOBAL_hi=new_cdg_hi,
-                TOTSCORE_mean=new_tot,
-                TOTSCORE_lo=new_tot_lo,
-                TOTSCORE_hi=new_tot_hi,
-                stage_probs=pt.stage_probs,
-                conversion_prob=conv,
-            )
+        # Scale MMSE
+        if pt.MMSE_mean is not None:
+            d_m = pt.MMSE_mean - cur_m
+            scaled_d_m = d_m * decline_mult if d_m < 0 else d_m / decline_mult
+            new_mean = round(max(0.0, min(30.0, cur_m + scaled_d_m)), 1)
+            new_lo = round(max(0.0, pt.MMSE_lo + (scaled_d_m - d_m)), 1)
+            new_hi = round(min(30.0, pt.MMSE_hi + (scaled_d_m - d_m)), 1)
         else:
-            scen_fc_points[h] = pt
+            new_mean, new_lo, new_hi = None, None, None
+
+        # Scale CDGLOBAL
+        if pt.CDGLOBAL_mean is not None:
+            d_c = pt.CDGLOBAL_mean - cur_c
+            scaled_d_c = d_c * decline_mult if d_c > 0 else d_c / decline_mult
+            new_cdg = round(max(0.0, min(3.0, cur_c + scaled_d_c)), 2)
+            new_cdg_lo = round(max(0.0, pt.CDGLOBAL_lo + (scaled_d_c - d_c)), 2)
+            new_cdg_hi = round(min(3.0, pt.CDGLOBAL_hi + (scaled_d_c - d_c)), 2)
+        else:
+            new_cdg, new_cdg_lo, new_cdg_hi = None, None, None
+
+        # Scale TOTSCORE
+        if pt.TOTSCORE_mean is not None:
+            d_t = pt.TOTSCORE_mean - cur_t
+            scaled_d_t = d_t * decline_mult if d_t > 0 else d_t / decline_mult
+            new_tot = round(max(0.0, min(70.0, cur_t + scaled_d_t)), 1)
+            new_tot_lo = round(max(0.0, pt.TOTSCORE_lo + (scaled_d_t - d_t)), 1)
+            new_tot_hi = round(min(70.0, pt.TOTSCORE_hi + (scaled_d_t - d_t)), 1)
+        else:
+            new_tot, new_tot_lo, new_tot_hi = None, None, None
+
+        # Re-stage at horizon with Model A (TwinStager)
+        fc_stage_inputs = dict(hypo_latest)
+        fc_stage_inputs.update(twin.demographics)
+        if new_mean is not None: fc_stage_inputs["MMSE"] = new_mean
+        if new_cdg is not None: fc_stage_inputs["CDGLOBAL"] = new_cdg
+        if new_tot is not None: fc_stage_inputs["TOTSCORE"] = new_tot
+        st_res = get_stager().predict_one(fc_stage_inputs)
+        h_stage_probs = {
+            "CN": round(float(st_res["probs"]["CN"]), 4),
+            "MCI": round(float(st_res["probs"]["MCI"]), 4),
+            "AD": round(float(st_res["probs"]["AD"]), 4),
+        }
+
+        # Conversion / Progression risk at horizon
+        if scen_state.stage == "AD":
+            sigma_m = max(1.0, HORIZON_RESIDUAL_MAE.get(int(h), {}).get("MMSE", 1.5) * 1.25)
+            d_m_val = (new_mean - cur_m) if new_mean is not None else 0.0
+            z_m = (-3.0 - d_m_val) / sigma_m
+            prog_risk = round(float(0.5 * (1.0 + math.erf(z_m / math.sqrt(2.0)))), 4)
+            h_conv_risk = max(0.05, min(0.98, prog_risk))
+        else:
+            h_conv_risk = round(min(1.0, max(0.0, (pt.conversion_prob or 0.0) * decline_mult)), 4) if pt.conversion_prob is not None else 0.0
+
+        scen_fc_points[h] = ForecastPoint(
+            month=pt.month,
+            date=pt.date,
+            MMSE_mean=new_mean,
+            MMSE_lo=new_lo,
+            MMSE_hi=new_hi,
+            CDGLOBAL_mean=new_cdg,
+            CDGLOBAL_lo=new_cdg_lo,
+            CDGLOBAL_hi=new_cdg_hi,
+            TOTSCORE_mean=new_tot,
+            TOTSCORE_lo=new_tot_lo,
+            TOTSCORE_hi=new_tot_hi,
+            stage_probs=StageProbs(**h_stage_probs),
+            conversion_prob=h_conv_risk,
+        )
 
     scen_fc_target = scen_fc_points.get(h_str)
+    scen_anchor_stage = scen_state.stage
+    scen_p_ad = scen_fc_target.stage_probs.AD if (scen_fc_target and scen_fc_target.stage_probs) else scen_state.stage_probs.AD
+
+    scen_headline_metric = "p_ad_at_horizon"
+    scen_headline_val = scen_p_ad
+    scen_prog_val = scen_fc_target.conversion_prob if (scen_fc_target and scen_anchor_stage == "AD") else 0.0
+    scen_conv_dict = {f"{h}m": scen_fc_points[h].conversion_prob for h in ["12", "24"] if h in scen_fc_points}
+    if not scen_conv_dict:
+        scen_conv_dict = {f"{h_str}m": scen_headline_val}
+
     scen_payload = {
-        "stage_probs": scen_state.stage_probs.model_dump(),
+        "stage_probs": scen_fc_target.stage_probs.model_dump() if (scen_fc_target and scen_fc_target.stage_probs) else scen_state.stage_probs.model_dump(),
+        "anchor_stage_probs": scen_state.stage_probs.model_dump(),
         "forecast": {h_str: scen_fc_target.model_dump()} if scen_fc_target else {},
-        "conversion_risk": scen_state.conversion_risk,
+        "conversion_risk": scen_conv_dict,
+        "progression_risk": scen_prog_val,
+        "p_ad_at_horizon": scen_p_ad,
+        "headline_risk_metric": scen_headline_metric,
+        "headline_risk_value": scen_headline_val,
     }
 
-    # 5. Compute deltas
+    # 5. Compute deltas (delta = scenario - baseline)
+    b_p = baseline_payload["stage_probs"]
+    s_p = scen_payload["stage_probs"]
+
+    delta_p_ad = round(s_p["AD"] - b_p["AD"], 4)
+    delta_headline = round(scen_headline_val - base_headline_val, 4)
+    delta_prog = round(scen_prog_val - base_prog_val, 4)
+
+    delta_mmse = round(scen_fc_target.MMSE_mean - base_fc.MMSE_mean, 2) if (base_fc and scen_fc_target and base_fc.MMSE_mean is not None and scen_fc_target.MMSE_mean is not None) else None
+    delta_cdg = round(scen_fc_target.CDGLOBAL_mean - base_fc.CDGLOBAL_mean, 2) if (base_fc and scen_fc_target and base_fc.CDGLOBAL_mean is not None and scen_fc_target.CDGLOBAL_mean is not None) else None
+    delta_tot = round(scen_fc_target.TOTSCORE_mean - base_fc.TOTSCORE_mean, 2) if (base_fc and scen_fc_target and base_fc.TOTSCORE_mean is not None and scen_fc_target.TOTSCORE_mean is not None) else None
+
+    def _get_direction(metric_name: str, diff: Optional[float], eps: float = 1e-4) -> str:
+        if diff is None or abs(diff) <= eps:
+            return "same"
+        # Higher is better for MMSE and CN
+        if metric_name in ["MMSE_mean", "CN", "stage_CN"]:
+            return "better" if diff > 0 else "worse"
+        # Higher is worse for AD, MCI, CDR, ADAS, conversion_risk, progression_risk, headline_risk
+        return "worse" if diff > 0 else "better"
+
     delta: Dict[str, Any] = {
         "stage_probs": {
-            "CN": round(scen_state.stage_probs.CN - base_state.stage_probs.CN, 4),
-            "MCI": round(scen_state.stage_probs.MCI - base_state.stage_probs.MCI, 4),
-            "AD": round(scen_state.stage_probs.AD - base_state.stage_probs.AD, 4),
+            "CN": round(s_p["CN"] - b_p["CN"], 4),
+            "MCI": round(s_p["MCI"] - b_p["MCI"], 4),
+            "AD": delta_p_ad,
         },
         "conversion_risk": {
-            k: round(scen_state.conversion_risk.get(k, 0.0) - base_state.conversion_risk.get(k, 0.0), 4)
+            k: round(scen_conv_dict.get(k, 0.0) - base_conv_dict.get(k, 0.0), 4)
             for k in ["12m", "24m"]
+        },
+        "MMSE_mean": delta_mmse,
+        "CDGLOBAL_mean": delta_cdg,
+        "TOTSCORE_mean": delta_tot,
+        "p_ad_at_horizon": delta_p_ad,
+        "headline_risk": delta_headline,
+        "progression_risk": delta_prog,
+        "direction": {
+            "p_ad_at_horizon": _get_direction("p_ad_at_horizon", delta_p_ad),
+            "headline_risk": _get_direction("headline_risk", delta_headline),
+            "progression_risk": _get_direction("progression_risk", delta_prog),
+            "conversion_risk": _get_direction("conversion_risk", delta_headline),
+            "MMSE_mean": _get_direction("MMSE_mean", delta_mmse),
+            "CDGLOBAL_mean": _get_direction("CDGLOBAL_mean", delta_cdg),
+            "TOTSCORE_mean": _get_direction("TOTSCORE_mean", delta_tot),
+            "AD": _get_direction("AD", delta_p_ad),
+            "CN": _get_direction("CN", s_p["CN"] - b_p["CN"]),
+        },
+        "directions": {
+            "p_ad_at_horizon": _get_direction("p_ad_at_horizon", delta_p_ad),
+            "headline_risk": _get_direction("headline_risk", delta_headline),
+            "progression_risk": _get_direction("progression_risk", delta_prog),
+            "conversion_risk_12m": _get_direction("conversion_risk", scen_conv_dict.get("12m", 0.0) - base_conv_dict.get("12m", 0.0)),
+            "conversion_risk_24m": _get_direction("conversion_risk", scen_conv_dict.get("24m", 0.0) - base_conv_dict.get("24m", 0.0)),
+            "MMSE_mean": _get_direction("MMSE_mean", delta_mmse),
+            "CDGLOBAL_mean": _get_direction("CDGLOBAL_mean", delta_cdg),
+            "TOTSCORE_mean": _get_direction("TOTSCORE_mean", delta_tot),
+            "AD": _get_direction("AD", delta_p_ad),
+            "CN": _get_direction("CN", s_p["CN"] - b_p["CN"]),
+        },
+        "metrics": {
+            "p_ad_at_horizon": {
+                "baseline": b_p["AD"],
+                "scenario": s_p["AD"],
+                "delta": delta_p_ad,
+                "direction": _get_direction("p_ad_at_horizon", delta_p_ad),
+            },
+            "headline_risk": {
+                "metric": scen_headline_metric,
+                "baseline": base_headline_val,
+                "scenario": scen_headline_val,
+                "delta": delta_headline,
+                "direction": _get_direction("headline_risk", delta_headline),
+            },
+            "progression_risk": {
+                "baseline": base_prog_val,
+                "scenario": scen_prog_val,
+                "delta": delta_prog,
+                "direction": _get_direction("progression_risk", delta_prog),
+            },
+            "MMSE_mean": {
+                "baseline": base_fc.MMSE_mean if base_fc else None,
+                "scenario": scen_fc_target.MMSE_mean if scen_fc_target else None,
+                "delta": delta_mmse,
+                "direction": _get_direction("MMSE_mean", delta_mmse),
+            },
+            "CDGLOBAL_mean": {
+                "baseline": base_fc.CDGLOBAL_mean if base_fc else None,
+                "scenario": scen_fc_target.CDGLOBAL_mean if scen_fc_target else None,
+                "delta": delta_cdg,
+                "direction": _get_direction("CDGLOBAL_mean", delta_cdg),
+            },
+            "TOTSCORE_mean": {
+                "baseline": base_fc.TOTSCORE_mean if base_fc else None,
+                "scenario": scen_fc_target.TOTSCORE_mean if scen_fc_target else None,
+                "delta": delta_tot,
+                "direction": _get_direction("TOTSCORE_mean", delta_tot),
+            },
         }
     }
-    if base_fc and scen_fc_target and base_fc.MMSE_mean is not None and scen_fc_target.MMSE_mean is not None:
-        delta["MMSE_mean"] = round(scen_fc_target.MMSE_mean - base_fc.MMSE_mean, 2)
 
     combined_warnings = list(dict.fromkeys(warnings + scen_state.scope_warnings))
     scen_reliability = scen_state.forecast_reliability or "ok"

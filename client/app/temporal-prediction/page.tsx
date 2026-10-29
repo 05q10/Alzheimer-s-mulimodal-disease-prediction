@@ -13,7 +13,7 @@ export default function TemporalPredictionPage() {
   const [tab, setTab] = useState<Tab>("workflow");
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-black text-white">
+    <div className="relative min-h-screen overflow-hidden bg-transparent text-white">
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(72,85,255,0.12),transparent_70%)]" />

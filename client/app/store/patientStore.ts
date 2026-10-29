@@ -27,7 +27,7 @@ export interface Demographics {
   sleepQuality: number | null; // 4–10
 
   familyHistoryAlzheimers: number | null; // 0/1
-
+  baselineDate?: string | null; // "YYYY-MM-DD"
   doctorInCharge: string | null; // For completeness ("XXXConfid")
 }
 
@@ -70,6 +70,21 @@ export interface AlleleInput {
   GENOTYPE: string | null;
 }
 
+export interface AdvancedScores {
+  CDGLOBAL: number | null;
+  ADAS11: number | null;
+  FAQ: number | null;
+  MOCA: number | null;
+  PTAU: number | null;
+  mriVolumes: {
+    hippocampus?: number | null;
+    entorhinal?: number | null;
+    ventricles?: number | null;
+    wholeBrain?: number | null;
+    icv?: number | null;
+  };
+}
+
 export interface PatientSession {
   id: string;
   timestamp: string;
@@ -85,6 +100,7 @@ export interface PatientSession {
   };
 
   cognitive: Cognitive;
+  advancedScores: AdvancedScores;
 
   baseModel: {
     input_used: any | null;
@@ -94,11 +110,16 @@ export interface PatientSession {
   alleleInput: AlleleInput;
 
   alleleResult: {
-  predictedClass: string | null;
-  probability: number | null;
-  riskCategory: string | null;
-};
+    predictedClass: string | null;
+    probability: number | null;
+    riskCategory: string | null;
+  };
 
+  twinId?: string | null;
+  twin?: import("../lib/api").TwinFull | null;
+  explain?: import("../lib/api").ExplainResponse | null;
+  inputUsage?: import("../lib/api").InputUsageResponse | null;
+  mriUploadResult?: import("../lib/api").MRIUploadResponse | null;
 }
 
 interface StoreState {
@@ -107,6 +128,8 @@ interface StoreState {
   updateDemographics: (data: Partial<Demographics>) => void;
   updateMedical: (data: Partial<Medical>) => void;
   updateCognitive: (data: Partial<Cognitive>) => void;
+  updateAdvancedScores: (data: Partial<AdvancedScores>) => void;
+  updateMriVolumes: (data: Partial<AdvancedScores["mriVolumes"]>) => void;
   updateUploads: (data: Partial<PatientSession["uploads"]>) => void;
 
   setAlleleInput: (data: Partial<AlleleInput>) => void;
@@ -116,11 +139,22 @@ interface StoreState {
     riskCategory: string;
   }>) => void;
 
-
   setMRIResult: (res: any) => void;
   setOCRResult: (res: any) => void;
 
   setBaseModelResult: (input: any, prediction: string) => void;
+
+  setTwinId: (twinId: string | null) => void;
+  setTwin: (twin: import("../lib/api").TwinFull | null) => void;
+  updateTwinState: (updater: (prev: import("../lib/api").TwinFull | null) => import("../lib/api").TwinFull | null) => void;
+
+  setExplain: (explain: import("../lib/api").ExplainResponse | null) => void;
+  setInputUsage: (inputUsage: import("../lib/api").InputUsageResponse | null) => void;
+  setMRIUploadResult: (result: import("../lib/api").MRIUploadResponse | null) => void;
+
+  autofillSamplePatient: () => void;
+  loadPersona: (persona: import("../lib/api").DemoPatientEntry) => void;
+  loadDemoCase: (demoCase: import("../lib/api").DemoCase) => void;
 
   resetSession: () => void;
 }
@@ -188,6 +222,21 @@ const defaultAllele: AlleleInput = {
   GENOTYPE: null,
 };
 
+const defaultAdvancedScores: AdvancedScores = {
+  CDGLOBAL: null,
+  ADAS11: null,
+  FAQ: null,
+  MOCA: null,
+  PTAU: null,
+  mriVolumes: {
+    hippocampus: null,
+    entorhinal: null,
+    ventricles: null,
+    wholeBrain: null,
+    icv: null,
+  },
+};
+
 /* ----------------------------------------------------------
    ZUSTAND STORE
 ---------------------------------------------------------- */
@@ -200,6 +249,7 @@ export const usePatientStore = create<StoreState>((set) => ({
     demographics: { ...defaultDemographics },
     medical: { ...defaultMedical },
     cognitive: { ...defaultCognitive },
+    advancedScores: { ...defaultAdvancedScores },
     alleleInput: { ...defaultAllele },
 
     uploads: {
@@ -220,7 +270,8 @@ export const usePatientStore = create<StoreState>((set) => ({
       riskCategory: null,
     },
 
-
+    twinId: null,
+    twin: null,
   },
 
   /* ------------------ UPDATE DEMOGRAPHICS ------------------ */
@@ -315,6 +366,272 @@ export const usePatientStore = create<StoreState>((set) => ({
       },
     })),
 
+  /* ------------------ DIGITAL TWIN ------------------ */
+  setTwinId: (twinId) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        twinId,
+      },
+    })),
+
+  setTwin: (twin) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        twin,
+        twinId: twin ? twin.twin_id : state.session.twinId,
+      },
+    })),
+
+  updateTwinState: (updater) =>
+    set((state) => {
+      const updated = updater(state.session.twin ?? null);
+      return {
+        session: {
+          ...state.session,
+          twin: updated,
+          twinId: updated ? updated.twin_id : state.session.twinId,
+        },
+      };
+    }),
+
+  setExplain: (explain) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        explain,
+      },
+    })),
+
+  setInputUsage: (inputUsage) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        inputUsage,
+      },
+    })),
+
+  setMRIUploadResult: (mriUploadResult) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        mriUploadResult,
+      },
+    })),
+
+  /* ------------------ ADVANCED SCORES ------------------ */
+  updateAdvancedScores: (data: Partial<AdvancedScores>) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        advancedScores: { ...state.session.advancedScores, ...data },
+      },
+    })),
+
+  updateMriVolumes: (data: Partial<AdvancedScores["mriVolumes"]>) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        advancedScores: {
+          ...state.session.advancedScores,
+          mriVolumes: {
+            ...state.session.advancedScores.mriVolumes,
+            ...data,
+          },
+        },
+      },
+    })),
+
+  /* ------------------ AUTOFILL SAMPLE PATIENT ------------------ */
+  autofillSamplePatient: () =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        demographics: {
+          ...state.session.demographics,
+          name: "Eleanor Vance",
+          age: 74,
+          gender: 1, // Female
+          ethnicity: 0, // Caucasian
+          educationLevel: 2, // Undergraduate (16 years)
+          height: 162,
+          weight: 62,
+          bmi: 23.6,
+          smoking: 0,
+          alcoholConsumption: 2,
+          physicalActivity: 6,
+          dietQuality: 7,
+          sleepQuality: 8,
+          familyHistoryAlzheimers: 1,
+          baselineDate: new Date().toISOString().split("T")[0],
+          doctorInCharge: "Dr. A. Sterling",
+        },
+        cognitive: {
+          ...state.session.cognitive,
+          mmse: 26,
+          functionalAssessment: 15,
+          adl: 18,
+          memoryComplaints: 1,
+          confusion: 0,
+          behavioralProblems: 0,
+          forgetfulness: 1,
+          difficultyCompletingTasks: 0,
+          disorientation: 0,
+          personalityChanges: 0,
+        },
+        advancedScores: {
+          CDGLOBAL: 0.5,
+          ADAS11: 12.0,
+          FAQ: 4.0,
+          MOCA: 23.0,
+          PTAU: 38.0,
+          mriVolumes: {
+            hippocampus: 3400,
+            entorhinal: 1350,
+            ventricles: 35000,
+            wholeBrain: 1050000,
+            icv: 1450000,
+          },
+        },
+        alleleInput: {
+          ABETA: 980,
+          TAU: 432,
+          MMSE: 26,
+          APVOLUME: 3400,
+          GENOTYPE: "e3/e4",
+        },
+      },
+    })),
+
+  /* ------------------ LOAD PERSONA INTO EDITOR ------------------ */
+  loadPersona: (persona) =>
+    set((state) => {
+      // Map persona baseline traits to realistic intake values
+      const isAd = persona.baseline_stage === "AD";
+      const isMci = persona.baseline_stage === "MCI";
+      const isCn = persona.baseline_stage === "CN";
+
+      const mmse = isCn ? 29 : isMci ? 25 : 18;
+      const cdr = isCn ? 0.0 : isMci ? 0.5 : 1.5;
+      const adas = isCn ? 6.0 : isMci ? 14.0 : 28.0;
+      const abeta = isCn ? 1200 : isMci ? 850 : 540;
+      const tau = isCn ? 280 : isMci ? 440 : 680;
+      const ptau = isCn ? 22 : isMci ? 38 : 65;
+
+      return {
+        session: {
+          ...state.session,
+          demographics: {
+            ...state.session.demographics,
+            name: persona.persona_label,
+            age: 73,
+            gender: 0,
+            educationLevel: 2,
+            familyHistoryAlzheimers: isCn ? 0 : 1,
+          },
+          cognitive: {
+            ...state.session.cognitive,
+            mmse,
+            memoryComplaints: isCn ? 0 : 1,
+            forgetfulness: isCn ? 0 : 1,
+          },
+          advancedScores: {
+            CDGLOBAL: cdr,
+            ADAS11: adas,
+            FAQ: isCn ? 0 : isMci ? 4 : 12,
+            MOCA: isCn ? 28 : isMci ? 22 : 15,
+            PTAU: ptau,
+            mriVolumes: {
+              hippocampus: isCn ? 3800 : isMci ? 3300 : 2600,
+              ventricles: isCn ? 26000 : isMci ? 38000 : 56000,
+              wholeBrain: 1100000,
+              entorhinal: isCn ? 1600 : isMci ? 1300 : 950,
+              icv: 1480000,
+            },
+          },
+          alleleInput: {
+            ABETA: abeta,
+            TAU: tau,
+            MMSE: mmse,
+            APVOLUME: 3400,
+            GENOTYPE: isCn ? "e3/e3" : isMci ? "e3/e4" : "e4/e4",
+          },
+        },
+      };
+    }),
+
+  /* ------------------ LOAD DEMO CASE BASELINE ------------------ */
+  loadDemoCase: (demoCase) =>
+    set((state) => {
+      const v0 = demoCase.visits[0] || {};
+      const isCn = demoCase.baseline_stage === "CN";
+      const isMci = demoCase.baseline_stage === "MCI";
+      const genotype = demoCase.apoe4_count === 2 ? "e4/e4" : demoCase.apoe4_count === 1 ? "e3/e4" : "e3/e3";
+
+      return {
+        session: {
+          ...state.session,
+          demographics: {
+            ...state.session.demographics,
+            name: demoCase.patient_name,
+            age: demoCase.age,
+            gender: demoCase.sex,
+            educationLevel: demoCase.education_years >= 16 ? 2 : demoCase.education_years >= 12 ? 1 : 0,
+            baselineDate: demoCase.baseline_date || v0.exam_date || "2024-01-15",
+            familyHistoryAlzheimers: demoCase.apoe4_count > 0 ? 1 : 0,
+            smoking: v0.lifestyle?.smoking ?? 0,
+            alcoholConsumption: v0.lifestyle?.alcohol ?? 1,
+            physicalActivity: v0.lifestyle?.physicalActivity ?? 5,
+            dietQuality: v0.lifestyle?.dietQuality ?? 6,
+            sleepQuality: v0.lifestyle?.sleepQuality ?? 7,
+          },
+          medical: {
+            ...state.session.medical,
+            hypertension: v0.medical?.hypertension ?? 0,
+            diabetes: v0.medical?.diabetes ?? 0,
+            depression: v0.medical?.depression ?? 0,
+            headInjury: v0.medical?.headInjury ?? 0,
+            cardiovascularDisease: v0.medical?.cardiovascularDisease ?? 0,
+          },
+          cognitive: {
+            ...state.session.cognitive,
+            mmse: v0.MMSE,
+            functionalAssessment: v0.functionalAssessment ?? (v0.MMSE >= 26 ? 8 : v0.MMSE >= 21 ? 5 : 3),
+            adl: v0.adl ?? (v0.MMSE >= 26 ? 9 : v0.MMSE >= 21 ? 6 : 4),
+            memoryComplaints: v0.symptoms?.memoryComplaints ? 1 : isCn ? 0 : 1,
+            behavioralProblems: v0.symptoms?.behavioralProblems ? 1 : 0,
+            confusion: v0.symptoms?.confusion ? 1 : isCn ? 0 : 1,
+            disorientation: v0.symptoms?.disorientation ? 1 : 0,
+            personalityChanges: v0.symptoms?.personalityChanges ? 1 : 0,
+            difficultyCompletingTasks: v0.symptoms?.difficultyCompletingTasks ? 1 : isCn ? 0 : 1,
+            forgetfulness: v0.symptoms?.forgetfulness ? 1 : isCn ? 0 : 1,
+          },
+          advancedScores: {
+            CDGLOBAL: v0.CDGLOBAL,
+            ADAS11: v0.TOTSCORE,
+            FAQ: v0.FAQ ?? (v0.CDGLOBAL === 0 ? 0 : v0.CDGLOBAL === 0.5 ? 4 : 12),
+            MOCA: v0.MOCA ?? Math.max(10, v0.MMSE - 2),
+            PTAU: v0.biomarkers?.PTAU ?? (v0.MMSE < 20 ? 65 : v0.MMSE < 26 ? 38 : 22),
+            mriVolumes: {
+              hippocampus: v0.mri_volumes?.hippocampus ?? (isCn ? 3800 : isMci ? 3300 : 2600),
+              ventricles: v0.mri_volumes?.ventricles ?? (isCn ? 26000 : isMci ? 38000 : 56000),
+              wholeBrain: v0.mri_volumes?.whole_brain ?? 1100000,
+              entorhinal: v0.mri_volumes?.entorhinal ?? (isCn ? 1600 : isMci ? 1300 : 950),
+              icv: v0.mri_volumes?.icv ?? 1480000,
+            },
+          },
+          alleleInput: {
+            ABETA: v0.biomarkers?.ABETA ?? (isCn ? 1200 : isMci ? 850 : 540),
+            TAU: v0.biomarkers?.TAU ?? (isCn ? 280 : isMci ? 440 : 680),
+            MMSE: v0.MMSE,
+            APVOLUME: v0.biomarkers?.APVOLUME ?? 3400,
+            GENOTYPE: genotype,
+          },
+        },
+      };
+    }),
+
   /* ------------------ RESET EVERYTHING ------------------ */
   resetSession: () =>
     set({
@@ -324,6 +641,7 @@ export const usePatientStore = create<StoreState>((set) => ({
         demographics: { ...defaultDemographics },
         medical: { ...defaultMedical },
         cognitive: { ...defaultCognitive },
+        advancedScores: { ...defaultAdvancedScores },
         uploads: {
           mriFile: null,
           reportFile: null,
@@ -337,8 +655,8 @@ export const usePatientStore = create<StoreState>((set) => ({
           probability: null,
           riskCategory: null,
         },
-
-
+        twinId: null,
+        twin: null,
       },
     }),
 }));

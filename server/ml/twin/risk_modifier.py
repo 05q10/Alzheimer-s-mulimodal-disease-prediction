@@ -117,7 +117,60 @@ def compute_lifestyle_modifier(lifestyle: Optional[Dict[str, Any]]) -> Dict[str,
             except (ValueError, TypeError):
                 rr = 1.0
 
-        # Factor type 2: mapping table
+        # Factor type 2: numeric scales for physical_activity, diet_quality, sleep_quality
+        elif factor_name in ["physical_activity", "diet_quality", "sleep_quality"]:
+            is_num = False
+            num_v = 0.0
+            try:
+                num_v = float(val)
+                is_num = True
+            except (ValueError, TypeError):
+                is_num = False
+
+            if is_num:
+                if factor_name == "physical_activity":
+                    # Supports 0-10 hrs/wk or 1-5 scale
+                    if num_v <= 1.5:
+                        rr = 1.39
+                    elif num_v <= 2.5:
+                        rr = 1.15
+                    elif num_v <= 4.0:
+                        rr = 1.00
+                    elif num_v <= 6.0:
+                        rr = 0.92
+                    else:
+                        rr = 0.85
+                elif factor_name == "diet_quality":
+                    # Supports 0-10 score or 1-5 scale
+                    if num_v <= 2.5:
+                        rr = 1.20
+                    elif num_v <= 3.5:
+                        rr = 1.10
+                    elif num_v <= 6.0:
+                        rr = 1.00
+                    elif num_v <= 7.5:
+                        rr = 0.94
+                    else:
+                        rr = 0.88
+                elif factor_name == "sleep_quality":
+                    # Supports 0-10 score or 1-5 scale
+                    if num_v <= 2.5:
+                        rr = 1.25
+                    elif num_v <= 4.0:
+                        rr = 1.12
+                    elif num_v <= 6.0:
+                        rr = 1.00
+                    elif num_v <= 7.5:
+                        rr = 0.98
+                    else:
+                        rr = 0.95
+                desc = f"{cfg.get('label', factor_name)}={num_v}"
+            elif "mapping" in cfg:
+                str_val = str(val).lower().strip()
+                rr = cfg["mapping"].get(str_val, 1.0)
+                desc = f"{cfg.get('label', factor_name)}={val}"
+
+        # Factor type 3: mapping table (binary medical conditions, smoking)
         elif "mapping" in cfg:
             str_val = str(val).lower().strip()
             # If boolean converted

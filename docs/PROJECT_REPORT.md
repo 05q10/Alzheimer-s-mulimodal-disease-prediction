@@ -410,3 +410,4 @@ To transition this framework from an advanced engineering demonstrator to a peer
 3. **Formal Evaluation of Scenario Lab Counterfactuals**: Conduct a clinical utility study assessing whether clinician decision-making improves when using the Scenario Lab, and mathematically benchmark counterfactual validity using causal inference techniques (e.g., G-computation or structural causal models).
 4. **Clinical Reader Study**: Perform an expert evaluation where licensed neurologists assess the clarity, clinical plausibility, and utility of the automated TreeSHAP narratives and leave-one-modality-out shifts.
 5. **Dynamic Survival Analysis**: Transition the conversion hazard model from fixed-horizon binary classifiers (6m, 12m, 24m) to continuous-time dynamic survival analysis (e.g., Dynamic DeepHit or Random Survival Forests) handling right-censoring and competing risks.
+

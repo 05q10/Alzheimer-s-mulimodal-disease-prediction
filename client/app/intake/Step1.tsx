@@ -3,15 +3,24 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { usePatientStore, Demographics } from "@/app/store/patientStore";
+import { twinApi } from "@/app/lib/api";
+import { Sparkles, AlertTriangle } from "lucide-react";
 
 interface Props {
   next: () => void;
 }
 
 export default function Step1({ next }: Props) {
-  const { session, updateDemographics } = usePatientStore();
+  const {
+    session,
+    updateDemographics,
+    setTwin,
+    setTwinId,
+    autofillSamplePatient,
+  } = usePatientStore();
   const d = session.demographics;
 
+  const [isCreatingTwin, setIsCreatingTwin] = useState(false);
   const [hoveredSlider, setHoveredSlider] = useState<string | null>(null);
 
   /* ------------------------------- */
@@ -88,7 +97,7 @@ export default function Step1({ next }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white p-4 md:p-8 rounded-xl">
+    <div className="min-h-screen bg-transparent text-white p-4 md:p-8 rounded-xl">
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}
         <motion.div
@@ -106,9 +115,19 @@ export default function Step1({ next }: Props) {
             Patient Health Profile
           </h1>
 
-          <p className="text-blue-200 text-lg">
+          <p className="text-blue-200 text-lg mb-4">
             Provide key details to personalize clinical predictions
           </p>
+
+          {/* Presenter Aid: Autofill Sample Patient */}
+          <button
+            type="button"
+            onClick={autofillSamplePatient}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition hover:scale-105 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-purple-200" />
+            <span>Autofill Sample Patient (74y, F, MMSE 26, APOE e3/e4)</span>
+          </button>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -175,6 +194,13 @@ export default function Step1({ next }: Props) {
                       <span key={v}>{v}</span>
                     ))}
                   </div>
+
+                  {d.age !== null && d.age !== undefined && (d.age < 55 || d.age > 90) && (
+                    <div className="mt-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                      <span>Outside the model's training range (55–90), treat results as illustrative.</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* GENDER */}
@@ -233,6 +259,22 @@ export default function Step1({ next }: Props) {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* BASELINE ASSESSMENT DATE */}
+                <div className="space-y-3">
+                  <label className="text-lg font-medium text-blue-100 flex items-center justify-between">
+                    <span>Baseline Assessment Date</span>
+                    <span className="text-xs text-blue-300/70 font-normal">Anchor date for visits</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={d.baselineDate ?? new Date().toISOString().split("T")[0]}
+                    onChange={(e) =>
+                      updateDemographics({ baselineDate: e.target.value })
+                    }
+                    className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-mono"
+                  />
                 </div>
 
                 {/* ETHNICITY */}
@@ -418,8 +460,7 @@ export default function Step1({ next }: Props) {
                       <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 font-bold shadow-lg">
                         {getLabel(
                           metric,
-                          d[metric.id as keyof Demographics] ??
-                            metric.min
+                          Number(d[metric.id as keyof Demographics] ?? metric.min)
                         )}
                       </div>
                     </div>
@@ -430,8 +471,7 @@ export default function Step1({ next }: Props) {
                       min={metric.min}
                       max={metric.max}
                       value={
-                        d[metric.id as keyof Demographics] ??
-                        metric.min
+                        Number(d[metric.id as keyof Demographics] ?? metric.min)
                       }
                       onChange={(e) =>
                         updateDemographics(
@@ -455,10 +495,45 @@ export default function Step1({ next }: Props) {
 
             {/* NEXT BUTTON */}
             <button
-              onClick={next}
-              className="w-full py-5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl text-lg font-bold shadow-xl hover:scale-[1.02] transition"
+              onClick={async () => {
+                try {
+                  setIsCreatingTwin(true);
+                  const educationMap: Record<number, number> = { 0: 8, 1: 12, 2: 16, 3: 18 };
+                  const eduYears =
+                    d.educationLevel !== null && d.educationLevel !== undefined
+                      ? educationMap[d.educationLevel] ?? 12
+                      : 12;
+
+                  const twin = await twinApi.createTwin({
+                    age: d.age || 70,
+                    sex: d.gender === 1 ? 1 : 0,
+                    education_years: eduYears,
+                    apoe4_count: d.familyHistoryAlzheimers === 1 ? 1 : 0,
+                    MMSE: session.cognitive?.mmse ?? undefined,
+                    is_synthetic: false,
+                    persona_label: d.name ? `Patient ${d.name}` : "Clinical Intake",
+                  });
+
+                  setTwin(twin);
+                  setTwinId(twin.twin_id);
+                } catch (err) {
+                  console.error("Twin creation failed, proceeding with intake:", err);
+                } finally {
+                  setIsCreatingTwin(false);
+                  next();
+                }
+              }}
+              disabled={isCreatingTwin}
+              className="w-full py-5 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl text-lg font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
             >
-              Continue →
+              {isCreatingTwin ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Synthesizing Digital Twin...</span>
+                </>
+              ) : (
+                <span>Continue →</span>
+              )}
             </button>
           </div>
 

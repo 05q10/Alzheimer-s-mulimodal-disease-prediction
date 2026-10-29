@@ -119,3 +119,4 @@ Digital Twin, Alzheimer's Disease, Mild Cognitive Impairment, Multimodal Fusion,
 - [ ] **Ethics & Regulatory Disclaimer**: Explicitly state that the system is a research prototype without FDA/CE clearance and does not handle real unconsented PHI.
 - [ ] **Figures & Architecture Diagrams**: Export high-resolution vector diagrams of the system architecture, TreeSHAP summary plots (`05_shap_catboost_bar.png`), and cluster-bootstrap calibration curves.
 - [ ] **Metric Synchronization**: Verify that every cited accuracy, MAE, and confidence interval matches `server/final_metrics.json` and associated results files verbatim.
+

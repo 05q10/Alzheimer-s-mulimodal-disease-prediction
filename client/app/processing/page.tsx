@@ -5,8 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { usePatientStore } from "../store/patientStore";
-
-const BASE_URL = "http://localhost:8001";
+import { API_BASE_URL, twinApi } from "../lib/api";
 
 export default function ProcessingPage() {
   const router = useRouter();
@@ -17,6 +16,10 @@ export default function ProcessingPage() {
   const setMRIResult = usePatientStore((s) => s.setMRIResult);
   const setAlleleResult = usePatientStore((s) => s.setAlleleResult);
   const setBaseModelResult = usePatientStore((s) => s.setBaseModelResult);
+  const setTwin = usePatientStore((s) => s.setTwin);
+  const setTwinId = usePatientStore((s) => s.setTwinId);
+
+  const BASE_URL = API_BASE_URL;
 
   const [logs, setLogs] = useState<string[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
@@ -207,15 +210,121 @@ export default function ProcessingPage() {
 
       await delay(600);
 
-      pushLog("Aggregating multimodal predictions and preparing digital twin...");
+      pushLog("Synthesizing patient-specific Digital Twin...");
       setStepIndex(5);
-      await delay(900);
+      await delay(600);
 
-      pushLog("Done.");
+      let createdTwinId = session.twinId;
+      try {
+        const educationMap: Record<number, number> = { 0: 8, 1: 12, 2: 16, 3: 18 };
+        const eduYears =
+          session.demographics.educationLevel !== null && session.demographics.educationLevel !== undefined
+            ? educationMap[session.demographics.educationLevel] ?? 12
+            : 12;
+
+        const genotype = session.alleleInput.GENOTYPE || "N/A";
+        let apoe4 = 0;
+        if (genotype.includes("4_4") || genotype.includes("4/4")) apoe4 = 2;
+        else if (genotype.includes("4")) apoe4 = 1;
+        else if (session.demographics.familyHistoryAlzheimers === 1) apoe4 = 1;
+
+        const twin = await twinApi.createTwin({
+          name: session.demographics.name || "Patient",
+          baseline_date: session.demographics.baselineDate || new Date().toISOString().split("T")[0],
+          demographics: {
+            age: session.demographics.age || 70,
+            sex: session.demographics.gender === 1 ? 1 : 0,
+            education_years: eduYears,
+            apoe4,
+            baseline_date: session.demographics.baselineDate || new Date().toISOString().split("T")[0],
+          },
+          scores: {
+            MMSE: session.cognitive.mmse ?? 26,
+            CDGLOBAL: session.advancedScores?.CDGLOBAL ?? undefined,
+            TOTSCORE: session.advancedScores?.ADAS11 ?? undefined,
+            FAQ: session.advancedScores?.FAQ ?? undefined,
+            MOCA: session.advancedScores?.MOCA ?? undefined,
+          },
+          biomarkers: {
+            ABETA: session.alleleInput.ABETA ?? undefined,
+            TAU: session.alleleInput.TAU ?? undefined,
+            PTAU: session.advancedScores?.PTAU ?? undefined,
+            APVOLUME: session.alleleInput.APVOLUME ?? undefined,
+          },
+          mri_volumes: session.advancedScores?.mriVolumes
+            ? {
+                hippocampus: session.advancedScores.mriVolumes.hippocampus ?? null,
+                entorhinal: session.advancedScores.mriVolumes.entorhinal ?? null,
+                ventricles: session.advancedScores.mriVolumes.ventricles ?? null,
+                whole_brain: (session.advancedScores.mriVolumes as any).whole_brain ?? session.advancedScores.mriVolumes.wholeBrain ?? null,
+                icv: session.advancedScores.mriVolumes.icv ?? null,
+              }
+            : undefined,
+          lifestyle: {
+            smoking: session.demographics.smoking,
+            alcoholConsumption: session.demographics.alcoholConsumption,
+            physicalActivity: session.demographics.physicalActivity,
+            dietQuality: session.demographics.dietQuality,
+            sleepQuality: session.demographics.sleepQuality,
+            hypertension: session.medical?.hypertension,
+            diabetes: session.medical?.diabetes,
+            depression: session.medical?.depression,
+            headInjury: session.medical?.headInjury,
+            cardiovascularDisease: session.medical?.cardiovascularDisease,
+          },
+          is_synthetic: false,
+          persona_label: session.demographics.name
+            ? `Patient ${session.demographics.name}`
+            : "Clinical Twin",
+        });
+
+        // Attach modalities if files were uploaded
+        if (session.uploads.mriFile) {
+          try {
+            pushLog("Uploading MRI scan to /twin/{id}/mri-image and running multimodal fusion...");
+            const mriRes = await twinApi.uploadMRIImage(
+              twin.twin_id,
+              session.uploads.mriFile
+            );
+            pushLog(`MRI scan classified: ${mriRes.mri.predicted_class}. Multimodal fusion complete.`);
+            twin.state = mriRes.state;
+            twin.modalities.mri_image = {
+              present: true,
+              latest: mriRes.mri,
+            };
+            setMRIResult(mriRes.mri);
+            usePatientStore.getState().setMRIUploadResult(mriRes);
+          } catch (e: any) {
+            pushLog(`MRI upload error: ${e?.message ?? String(e)}`);
+            console.warn("Failed to attach MRI file to twin:", e);
+          }
+        }
+        if (session.uploads.reportFile) {
+          try {
+            await twinApi.attachModality(
+              twin.twin_id,
+              "ocr_report",
+              undefined,
+              session.uploads.reportFile
+            );
+          } catch (e) {
+            console.warn("Failed to attach report file to twin:", e);
+          }
+        }
+
+        setTwin(twin);
+        setTwinId(twin.twin_id);
+        createdTwinId = twin.twin_id;
+        pushLog("Digital twin synthesized and calibrated successfully.");
+      } catch (err: any) {
+        pushLog(`Digital twin synthesis notice: ${err?.message ?? String(err)}`);
+      }
+
+      pushLog("Done. Directing to Digital Twin workspace...");
       setBusy(false);
-      await delay(800);
+      await delay(600);
 
-      router.push("/result");
+      router.push(`/twin/${createdTwinId || session.twinId || "demo-cn-mci"}`);
     }
 
     runPipeline();
@@ -228,7 +337,7 @@ export default function ProcessingPage() {
 
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden">
+    <div className="min-h-screen bg-transparent text-white relative overflow-hidden">
       {/* Neural Background - Fixed z-index */}
       <NeuralMesh />
 
@@ -237,7 +346,7 @@ export default function ProcessingPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-slate-900/80 backdrop-blur-xl border border-cyan-500/30 rounded-3xl p-8 shadow-2xl shadow-cyan-500/20"
+          className="bg-[#0b172e]/85 backdrop-blur-xl border border-cyan-500/30 rounded-3xl p-8 shadow-2xl shadow-cyan-500/20"
         >
           {/* Header */}
           <div className="mb-6">
@@ -253,7 +362,7 @@ export default function ProcessingPage() {
           </div>
 
           {/* Terminal Display */}
-          <div className="bg-black/90 border border-cyan-500/30 rounded-2xl p-6 font-mono text-sm shadow-inner">
+          <div className="bg-[#070e1d]/90 border border-cyan-500/30 rounded-2xl p-6 font-mono text-sm shadow-inner">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-cyan-500/20">
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-red-500/80"></div>

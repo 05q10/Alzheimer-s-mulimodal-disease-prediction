@@ -51,9 +51,19 @@ export default function Step2({ next, back }: Props) {
       }}
     >
       {file ? (
-        <div>
-          <div className="text-5xl mb-3">{icon}</div>
-          <p className="text-blue-200 text-sm">{file.name}</p>
+        <div className="flex flex-col items-center">
+          {file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png|webp)$/i) ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={URL.createObjectURL(file)}
+              alt="Uploaded preview"
+              className="w-32 h-32 object-cover rounded-xl border border-white/20 mb-3 shadow-lg"
+            />
+          ) : (
+            <div className="text-5xl mb-3">{icon}</div>
+          )}
+          <p className="text-blue-200 text-sm font-semibold">{file.name}</p>
+          <p className="text-[11px] text-emerald-400 mt-1">✓ File Attached ({(file.size / 1024).toFixed(1)} KB)</p>
         </div>
       ) : (
         <div>
@@ -154,7 +164,7 @@ export default function Step2({ next, back }: Props) {
   /* ---------------------- UI ---------------------- */
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white p-4 md:p-8 rounded-xl">
+    <div className="min-h-screen bg-transparent text-white p-4 md:p-8 rounded-xl">
       <div className="max-w-6xl mx-auto space-y-12">
 
         {/* HEADER */}

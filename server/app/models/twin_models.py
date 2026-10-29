@@ -35,15 +35,29 @@ class ForecastPoint(BaseModel):
 
 
 class VisitRecord(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     month: int = Field(ge=0, description="Months since baseline")
     exam_date: Optional[str] = Field(None, description="Observed date YYYY-MM-DD")
     age: Optional[float] = Field(None, description="Derived patient age at this visit")
     MMSE: Optional[float] = Field(None, ge=0, le=30)
     CDGLOBAL: Optional[float] = Field(None, ge=0, le=3)
-    TOTSCORE: Optional[float] = Field(None, ge=0, le=70,
-                                       description="ADAS11-Cog prorated (0-70, higher=worse)")
-    DX_obs: Optional[int] = Field(None, ge=1, le=3,
-                                   description="Observed DX at this visit (1=CN,2=MCI,3=AD); null if unknown")
+    TOTSCORE: Optional[float] = Field(None, ge=0, le=70, description="ADAS11-Cog prorated (0-70, higher=worse)")
+    FAQ: Optional[float] = Field(None, ge=0, le=30)
+    FAQTOTAL: Optional[float] = Field(None, ge=0, le=30)
+    MOCA: Optional[float] = Field(None, ge=0, le=30)
+    CDRSB: Optional[float] = Field(None, ge=0, le=18)
+    functional_assessment: Optional[float] = Field(None, ge=0, le=10)
+    adl: Optional[float] = Field(None, ge=0, le=10)
+    # The 7 clinical symptoms
+    memory_complaints: Optional[int] = None
+    behavioral_problems: Optional[int] = None
+    confusion: Optional[int] = None
+    disorientation: Optional[int] = None
+    personality_changes: Optional[int] = None
+    difficulty_completing_tasks: Optional[int] = None
+    forgetfulness: Optional[int] = None
+    DX_obs: Optional[int] = Field(None, ge=1, le=3, description="Observed DX at this visit (1=CN,2=MCI,3=AD); null if unknown")
     source: Literal["user", "adni", "synthetic"] = "user"
 
 
