@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\caption{Cross-sectional TwinStager (Model A) performance across diagnostic feature tiers on the held-out test partition ($N=3,022$ visits across 456 subjects).}
+\label{tab:stager_results}
+\small
+\begin{tabular}{lp{5.2cm}rrrr}
+\toprule
+\textbf{Tier} & \textbf{Included Feature Set} & \textbf{Accuracy} & \textbf{Macro-F1} & \textbf{Macro-F1 95\% CI} & \textbf{ECE} \\
+\midrule
+\textbf{T1}  & Age, Sex, Education, APOE4                   & 0.541 & 0.449 & [0.408, 0.486] & 0.0521 \\
+\textbf{T1b} & T1 + MMSE                                    & 0.687 & 0.656 & [0.623, 0.689] & 0.0384 \\
+\textbf{T2a} & T1b + CDGLOBAL, CDR-SB                       & 0.790 & 0.771 & [0.742, 0.800] & 0.0241 \\
+\textbf{T2b} & T2a + ADAS11, FAQ, MoCA (Core Cognitive)     & 0.804 & 0.788 & [0.759, 0.817] & 0.0206 \\
+\textbf{T3}  & T2b + CSF Biomarkers ($\text{A}\beta$, Tau, p-Tau) & 0.802 & 0.785 & [0.756, 0.814] & 0.0191 \\
+\textbf{T4}  & T3 + ComBat FreeSurfer Morphometry           & \textbf{0.811} & \textbf{0.796} & \textbf{[0.769, 0.824]} & \textbf{0.0192} \\
+\bottomrule
+\end{tabular}
+\end{table}

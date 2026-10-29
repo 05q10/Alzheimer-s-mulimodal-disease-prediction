@@ -1,0 +1,18 @@
+\begin{table*}[t]
+\centering
+\caption{Structured audit of methodological limitations, clinical risks, and implemented system safeguards.}
+\label{tab:limitations}
+\small
+\begin{tabular}{lp{6.5cm}p{7.5cm}}
+\toprule
+\textbf{Domain} & \textbf{Identified Limitation or Clinical Risk} & \textbf{Engineered Safeguard / Transparent Remediation} \\
+\midrule
+Cohort Generalizability & ADNI is a volunteer research cohort with high education and low racial diversity. & Explicit Model Card scope disclosure; system framed as research demonstrator without claims of community generalization. \\
+2D MRI Classifier       & ResNet34 was trained on Kaggle 2D slices with inflated internal accuracy (99.7\%). & Heavily downweighted to late-fusion $w=0.20$ with temperature $T=2.0$ and persistent UI disclaimer banner. \\
+Lifestyle Modifier      & ADNI does not longitudinally record lifestyle; factors were not learned from ADNI. & Explicitly labeled as an external literature prior; square-root shrinkage ($\text{RR}^{0.5}$) and hard cap $[0.85, 1.35]$ enforced. \\
+Diagnostic Circularity  & Cognitive tests (CDR, MMSE, ADAS) partly define the syndromic diagnosis. & Clear reporting of multi-tier incremental accuracy; paper claims lead with longitudinal progression and conversion forecasting. \\
+Short-Horizon CDGLOBAL  & Model B does not beat naive persistence at 6m and 12m for CDGLOBAL ($0.064$ vs $0.061$). & Documented plainly in results and discussion; discrete ordinal scales change too slowly over 6 months for regression modeling. \\
+Regulatory Boundary     & Academic prototype; not cleared by FDA, CE, or CDSS regulatory bodies. & Mandatory clinical disclaimer on all API contracts, exports, and UI headers; no autonomous clinical treatment actions permitted. \\
+\bottomrule
+\end{tabular}
+\end{table*}

@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{Paired statistical ablations and incremental utility evaluations (evaluated on identical subject subsets with 1,000 cluster-bootstrap iterations).}
+\label{tab:paired_ablations}
+\small
+\begin{tabular}{lp{4.5cm}rrp{4.2cm}}
+\toprule
+\textbf{Evaluation Task} & \textbf{Comparison Condition} & \textbf{Metric Delta} & \textbf{95\% Cluster-CI} & \textbf{Statistical Conclusion} \\
+\midrule
+CSF in Staging      & T3 (+CSF) vs T2b (Cognitive) on CSF subset ($N=486$)  & $\Delta\text{F1} = +0.0135$ & [-0.0009, 0.0320] & \textbf{Null result}: CI spans zero ($p>0.05$). No detectable benefit. \\
+FreeSurfer in Stage & T2b+MRI vs T2b on MRI subset ($N=1,996$)              & $\Delta\text{F1} = +0.0201$ & [0.0014, 0.0396]  & \textbf{Significant boost}: modest positive contribution to staging. \\
+Masked GRU vs Raw   & Masked GRU vs Unmasked GRU (MMSE@12m)                & $\Delta\text{MAE} = -0.0450$ & [-0.0814, -0.0115] & \textbf{Significant}: missingness mask improves sequential modeling. \\
+MRI in Progression  & With vs Without FreeSurfer MRI (MMSE@12m)            & $\Delta\text{MAE} = -0.0122$ & [-0.0425, 0.0193] & \textbf{Null result}: volumetric MRI does not improve 12m trajectory. \\
+Vitals Inclusion    & Adding BMI and Blood Pressure to Stager               & $\Delta\text{MAE} = -0.0080$ & [-0.0310, 0.0160] & \textbf{Null result} ($p=0.42$): excluded from staging feature set. \\
+\bottomrule
+\end{tabular}
+\end{table}

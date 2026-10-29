@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\caption{Longitudinal Progression Model B forecasting error (Mean Absolute Error, MAE) compared against naive persistence and linear slope extrapolation baselines on identical test anchors.}
+\label{tab:forecast_mae}
+\small
+\begin{tabular}{llrrlrrr}
+\toprule
+\textbf{Target} & \textbf{Horizon} & \textbf{N Anchors} & \textbf{GBM Val} & \textbf{GBM Test MAE [95\% CI]} & \textbf{Persistence} & \textbf{Slope Extrap} & \textbf{Beats Persist?} \\
+\midrule
+\textbf{MMSE} & 6 months  & 755  & 1.536 & \textbf{1.385} [1.261, 1.513] & 1.425 & 1.781 & \textbf{YES} \\
+              & 12 months & 1135 & 1.549 & \textbf{1.465} [1.354, 1.581] & 1.603 & 2.108 & \textbf{YES} \\
+              & 24 months & 880  & 1.705 & \textbf{1.560} [1.403, 1.725] & 1.739 & 2.408 & \textbf{YES} \\
+\midrule
+\textbf{CDGLOBAL} & 6 months  & 748  & 0.078 & \textbf{0.064} [0.049, 0.080] & 0.061 & 0.080 & \textbf{NO} \\
+                  & 12 months & 1140 & 0.119 & \textbf{0.113} [0.097, 0.130] & 0.112 & 0.139 & \textbf{NO} \\
+                  & 24 months & 887  & 0.164 & \textbf{0.138} [0.115, 0.165] & 0.152 & 0.187 & \textbf{YES} \\
+\midrule
+\textbf{ADAS11} & 6 months  & 527  & 2.938 & \textbf{2.841} [2.609, 3.075] & 2.928 & 3.972 & \textbf{YES} \\
+                & 12 months & 872  & 3.055 & \textbf{2.903} [2.691, 3.149] & 3.224 & 4.828 & \textbf{YES} \\
+                & 24 months & 664  & 3.446 & \textbf{3.120} [2.824, 3.441] & 3.665 & 6.253 & \textbf{YES} \\
+\bottomrule
+\end{tabular}
+\end{table}

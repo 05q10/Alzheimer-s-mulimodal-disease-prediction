@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\caption{Data inventory, file sizes, longitudinal coverage, and merge decisions across the multimodal repository.}
+\label{tab:data_sources}
+\small
+\begin{tabular}{llrrlp{6.8cm}}
+\toprule
+\textbf{Dataset File} & \textbf{Modality / Family} & \textbf{Size} & \textbf{Visits} & \textbf{Coverage} & \textbf{Merge Decision \& Role} \\
+\midrule
+\texttt{shortened\_result-val.csv} & Longitudinal DX Ground Truth & 1.02 MB & 22,168 & 100.0\% & Canonical baseline diagnosis backbone (1=CN, 2=MCI, 3=AD). \\
+\texttt{ADNIMERGE\_13Aug2025.csv} & Demographics, CSF, PET & 12.65 MB & 16,421 & 77.6\% & Exact VISCODE join + nearest $\pm 2$ months fallback; CSF biomarkers. \\
+\texttt{ADSP\_PHC\_T1\_FS\_15Aug2025.csv} & ComBat FreeSurfer MRI & 39.17 MB & 10,260 & 76.3\% & Backward-only temporal merge ($\le 180$ days prior); no future scan leakage. \\
+\texttt{All\_Subjects\_APOERES\_fixed\_simple.csv} & APOE Genotyping & 0.22 MB & 3,006 & 85.3\% & Curated APOE strings parsed to numeric $\varepsilon4$ allele count ($0, 1, 2$). \\
+\texttt{All\_Subjects\_My\_Table\_30Dec2025.csv} & Neuropsychological Tests & 3.36 MB & 24,759 & 100.0\% & Standardized scores: CDR-SB, MoCA, and FAQ activities. \\
+\texttt{All\_Subjects\_Study\_Entry\_30Dec2025.csv} & Study Metadata & 0.22 MB & 4,934 & 100.0\% & Entry baseline age and anchor date for visit timeline reconstruction. \\
+\texttt{All\_Subjects\_ADAS\_30Dec2025.csv} & ADAS-Cog Audit File & 1.72 MB & 12,919 & 97.0\% & Audit verification: proves identity $\text{TOTSCORE} \equiv \text{ADAS11 prorated}$ ($r=0.9991$). \\
+\texttt{alzheimers\_disease\_data.csv} & Lifestyle Screening (Kaggle) & 0.61 MB & 2,149 & External & Independent cohort; trains separate auxiliary screening chip (unblended). \\
+Kaggle 2D MRI Slice Dataset & Axial Neuroimaging Slices & 44,000 imgs & N/A & External & Trains 2D ResNet34; fused at weight $w=0.20$ with temperature $T=2.0$. \\
+\bottomrule
+\end{tabular}
+\end{table*}

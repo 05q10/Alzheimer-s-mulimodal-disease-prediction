@@ -1,0 +1,16 @@
+\begin{table}[t]
+\centering
+\caption{Clinical archetype benchmark: validation against empirical 5th--95th percentile training envelope and automated scope guards.}
+\label{tab:archetype_plausibility}
+\small
+\begin{tabular}{lp{3.5cm}rrrrp{3.2cm}}
+\toprule
+\textbf{Archetype} & \textbf{Baseline Scores} & \textbf{P(CN)} & \textbf{P(MCI)} & \textbf{P(AD)} & \textbf{12m MMSE [Bounds]} & \textbf{Reliability \& Scope Alerts} \\
+\midrule
+Cognitively Normal (CN) & Age 72, MMSE 29, CDR 0, ADAS 5, FAQ 0   & \textbf{0.933} & 0.053 & 0.014 & 28.5 [26.1, 30.0] & \texttt{ok}; no scope alerts. \\
+Mild Cognitive Imp (MCI)& Age 72, MMSE 27, CDR 0.5, ADAS 10, FAQ 3 & 0.025 & \textbf{0.933} & 0.041 & 25.8 [23.4, 28.3] & \texttt{ok}; no scope alerts. \\
+Mild AD                 & Age 72, MMSE 20, CDR 1.0, ADAS 25, FAQ 15& 0.011 & 0.030 & \textbf{0.959} & 13.9 [$\le \text{curr}+1$] & \texttt{ok}; valid advanced decline. \\
+Moderate AD             & Age 72, MMSE 16, CDR 1.0, ADAS 35, FAQ 18& 0.029 & 0.133 & \textbf{0.838} & 12.3 [$\le \text{curr}+1$] & \texttt{low}; alerts: MMSE 16 outside [20, 30]; ADAS 35 outside [2.3, 26.3]. \\
+\bottomrule
+\end{tabular}
+\end{table}

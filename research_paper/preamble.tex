@@ -1,0 +1,47 @@
+% research_paper/preamble.tex
+% ============================
+% Shared preamble for journal article format.
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{microtype}
+
+% Include generated macros from make_numbers.py
+\input{numbers.tex}
+
+% Image placeholder macro
+% Usage: \figph{filename_without_extension}{caption_text}{label_text}
+\newcommand{\figph}[3]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{figures/#1.pdf}{%
+      \includegraphics[width=0.88\linewidth]{figures/#1.pdf}%
+    }{%
+      \IfFileExists{figures/#1.png}{%
+        \includegraphics[width=0.88\linewidth]{figures/#1.png}%
+      }{%
+        \framebox[\linewidth]{\rule{0pt}{140pt}\Large\textbf{PLACEHOLDER: figures/#1}}%
+      }%
+    }%
+    \caption{#2}
+    \label{#3}
+  \end{figure}%
+}

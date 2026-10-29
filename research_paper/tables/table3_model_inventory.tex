@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\caption{Model inventory: operational deployment status, architecture, input modalities, training cohort, and verified primary metric.}
+\label{tab:model_inventory}
+\small
+\begin{tabular}{lp{3.5cm}lp{3.8cm}p{3.2cm}}
+\toprule
+\textbf{Component Model} & \textbf{Architecture} & \textbf{Status} & \textbf{Training Cohort} & \textbf{Primary Metric (Source File)} \\
+\midrule
+TwinStager (Model A) & Calibrated Multi-Tier CatBoostClassifier ($T=0.86$) & Production (Shipped) & ADNI (2,123 train subjects, stratified split) & Full Test Macro-F1 = 0.796 [0.769, 0.824] (\texttt{exp09\_stager\_results.md}) \\
+TwinProgression (Model B) & Delta-Change CatBoostRegressors + Clustered CIs & Production (Shipped) & ADNI (2,123 train subjects, multi-horizon) & MMSE 12m MAE = 1.465 [1.354, 1.581] (\texttt{exp10\_progression\_results.md}) \\
+Conversion Hazard GBM & Binary CatBoost Classifier (6m, 12m, 24m) & Production (Shipped) & ADNI non-demented anchors & 24m AUROC = 0.8111 [0.756, 0.861], BSS = +0.2088 (\texttt{exp10\_progression\_results.md}) \\
+Masked Recurrent GRU & 2-Layer GRU with Missingness Mask Indicators & Experiment (Not Shipped) & ADNI 4-visit sequential cohort & 12m MMSE MAE = 1.475 (beaten by GBM 1.465) (\texttt{exp10\_progression\_results.md}) \\
+Lifestyle Screener & CatBoostClassifier (33 clinical/lifestyle features) & Production (Aux Chip) & Kaggle Lifestyle Cohort ($N=2,149$ records) & Test Accuracy = 0.956 [0.935, 0.972] (\texttt{06\_bootstrap\_results.txt}) \\
+2D MRI Slice Classifier & FastAI ResNet34 with Softmax Head ($T=2.0$) & Production (Late Fusion) & Kaggle Augmented MRI Slices (~44,000 slices) & Kaggle Slice Acc = 99.7\%* (downweighted $w=0.20$) (\texttt{final\_metrics.json}) \\
+Biomarker Ensemble & XGBoost + RF + MLP Optuna Blend & Production (Aux Chip) & ADNI Holdout Set (~3,000 rows) & Holdout Accuracy = 0.481 [0.435, 0.526] (\texttt{06\_bootstrap\_results.txt}) \\
+Vision-Language OCR & Vision-LLaMA Maverick with Tesseract fallback & Production (Ingestion) & Synthetic Clinical Reports ($N=12$ test fields) & Exact Match = 83.3\%, Fuzzy = 8.3\% (\texttt{07\_ocr\_confusion.json}) \\
+Lifestyle Modifier Prior & Lancet Commission Relative Risk Table & Production (Prior) & Literature Prior (Livingston et al. 2024) & Hard Bounded in [0.85, 1.35] (\texttt{risk\_modifier\_config.json}) \\
+\bottomrule
+\end{tabular}
+\end{table*}
