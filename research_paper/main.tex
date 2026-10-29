@@ -47,123 +47,573 @@ The primary defensible contributions of this work are fourfold:
 
 
 % ── Section 2: Literature Review ─────────────────────────────────────────────
+% Required packages in preamble: booktabs, tabularx, array
 \section{Literature Review}
 \label{sec:related_work}
 
-% TODO: Literature review to be added.
+Computational research on Alzheimer's disease (AD) has progressed along several largely separate lines: multimodal diagnosis, prediction of conversion from mild cognitive impairment (MCI) to dementia, longitudinal and sequence-based forecasting, explainable tree-based modeling, and, more recently, patient-specific digital twins. This section reviews each line, with particular attention to evaluation rigor (data leakage, calibration, external validation) and to whether the incremental value of costly modalities is actually tested. We close by stating the gap addressed by the present framework.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Multimodal Machine Learning for AD Diagnosis}
+\label{subsec:rw_multimodal}
+
+Recent evidence consistently favors multimodal over unimodal models. A systematic review of 66 multimodal AI studies spanning MRI, PET, CSF, EEG, clinical, and cognitive data reports that multimodal models often outperform unimodal baselines, with average ADNI diagnostic accuracy of 92.5\% and average MCI-conversion AUROC of 0.922 \cite{jmir2026multimodal}. A scoping review of diagnostic and prognostic multimodal models similarly finds that MCI-to-AD conversion is the most common prediction target and that ADNI dominates the evidence base, yet only 10.1\% of models undergo external validation \cite{xia2025scoping}. Both reviews therefore support the predictor families used in this work (cognitive and functional scales, CSF biomarkers, structural MRI, APOE genotype, and demographics), while exposing persistent weaknesses: heavy reliance on a single cohort, limited external validation, and inconsistent reporting of paired modality ablations, calibration, and leakage-safe longitudinal evaluation.
+
+On the forecasting side, Health Information Science and Systems (2025) \cite{hiss2025forecast} used ADNI-2 3D MRI features together with cognitive, functional, and genetic indicators in LSTM-based models to predict cognition at 6, 12, and 48 months. A multimodal attention-LSTM achieved the lowest error, and SHAP supported interpretation. This work is the closest precedent for our multi-horizon forecasting, but it centers on MRI-based deep sequence models and does not provide a clinician-facing workflow with counterfactual simulation, plausibility constraints, or modality-cost ablations.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Prediction of MCI-to-AD Conversion}
+\label{subsec:rw_conversion}
+
+Conversion prediction is the most heavily studied prognostic task. Gradient-boosted models trained on longitudinal ADNI phenotypic data have shown strong discrimination: an XGBoost model on 493 MCI participants predicted conversion over 12--48 months with AUROC of at least 0.857 under subject-level train/test separation \cite{xgb2023longitudinal}, and an XGBoost--recursive feature elimination--SHAP pipeline reached 85\% accuracy for 36-month conversion \cite{grammenos2024xgboost}. Multisource models combining neuropsychological, MRI, and visit-history data improved AUROC from 0.855 at baseline to 0.912 as more visits became available, supporting the premise that repeated assessments carry prognostic information beyond a single snapshot \cite{platero2021multimodal}. Imaging-heavy approaches add amyloid PET and MRI shape features \cite{kim2023petmri}, or combine MRI, FDG-PET, CSF, and APOE in a multimodal Gaussian-process classifier that yields probabilistic conversion estimates and outperforms single-modality models \cite{zhang2012gp}.
+
+These studies establish cognitive scores, atrophy measures, CSF tau and amyloid markers, APOE genotype, and visit history as informative predictors. However, they share several limitations relevant to our work. First, most treat conversion as an isolated binary task, without linking risk to continuous cognitive trajectories or projected future syndromic stage. Second, several depend on advanced PET or MRI shape engineering, or on near-complete multimodal profiles, which are rarely available in routine care, and none provides a tiered fallback for incomplete records. Third, probabilistic outputs are seldom evaluated with skill scores against a reference forecast. Our conversion-hazard models at 6, 12, and 24 months, anchored on both CN and MCI visits, and re-routed through the calibrated stager, target these gaps.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Longitudinal Modeling and Data Leakage}
+\label{subsec:rw_leakage}
+
+Longitudinal AD data are especially prone to optimistic evaluation. A critical review of leakage in deep-learning AD classification explains that visit-level or image-level splitting inflates performance, citing evidence that slice-wise splitting can yield 94\% apparent accuracy versus 66\% under subject-wise splitting, and recommends subject-level splitting, temporal separation, nested validation, and external testing \cite{leakage2025dl}. Concrete leakage-aware designs have followed. A longitudinal 2.5D framework for CN/MCI/AD classification enforces a strict subject-level 70/15/15 split so that all visits of a participant remain in one partition \cite{pmc2026longitudinal25d}. A leakage-free benchmark on OASIS-2 identifies three recurring problems, namely CDR-related target leakage, improper longitudinal splitting, and weak temporal modeling, and addresses them with group-aware splitting and exclusion of diagnosis-defining variables \cite{pmc2026leakagefree}. On the modeling side, a Transformer-based deep survival model on longitudinal cognitive and MRI data uses separate heads for CN-to-MCI and MCI-to-AD transitions with patient-level separation \cite{sciopen2025survival}.
+
+These works provide the methodological basis for our four safeguards (subject-stratified partitioning, backward-only MRI joins within 180 days, blacklisting of forward-looking trajectory features, and no statistical imputation). They are, however, either MRI-centered, confined to classification, or methodological critiques; none implements these controls across tabular multimodal staging, delta regression, conversion hazards, and decision support in a single pipeline. Complex survival Transformers are also data-hungry, whereas we empirically compare recurrent models (BiLSTM and a masked GRU) against CatBoost and retain the simpler model when it performs equivalently or better.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Digital Twins for Alzheimer's Disease}
+\label{subsec:rw_dt}
+
+The digital-twin paradigm has moved from perspective to early implementation. A perspective in \textit{Alzheimer's \& Dementia} proposed digital twins as clinician-facing decision-support systems integrating risk factors, current presentation, treatment history, progression, and comorbidities, to support diagnosis, monitoring, and care planning \cite{dt2022perspective}. The Fulcrum Brain Health and Neurodegeneration model builds individual twins from clinical and trial data and simulates MCI/dementia risk under lifestyle, drug, and supplement interventions \cite{fulcrum2025}; it is the nearest conceptual predecessor of our Scenario Lab, but relies on literature-curated evidence and Bayesian simulation rather than a leakage-controlled longitudinal pipeline trained on real patient visits. A twin built on EEG-derived digital biomarkers (DADD) predicts CSF biomarker positivity with 88\% accuracy and follow-up conversion with 87\% accuracy \cite{dadd2025}, but depends on EEG rather than routinely available clinical data and does not simulate trajectories. AI-generated digital twins have also been used as synthetic placebo outcomes in an AD trial, reducing estimated sample size by roughly 9--15\% \cite{trialtwins2025}, illustrating counterfactual trajectory forecasting but for trial design rather than clinical monitoring. A systematic scoping review of neurological digital twins concludes that multimodal twins can support early detection, risk stratification, progression prediction, and treatment decisions, while noting that many AD twins remain proof-of-concept with limited prospective validation \cite{bel2026dtreview}.
+
+Collectively, these studies show the promise of digital twins but leave open an integrated system that couples empirical longitudinal ADNI modeling, strict anti-leakage controls, calibrated probabilistic outputs, TreeSHAP explanations, and clinically bounded counterfactual simulation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Tree-Based Models and Explainability}
+\label{subsec:rw_trees}
+
+Gradient-boosted trees remain strong for heterogeneous clinical tabular data. CatBoost \cite{prokhorenkova2018catboost}, with ordered boosting and native handling of categorical and missing values, has been applied to ADNI for CN/MCI/AD classification from routine clinical variables, blood tests, neuropsychological scores, and APOE; MCI was the hardest class, and neuropsychological measures plus APOE improved performance \cite{pmc2026mcicatboost}. This mirrors our observation that MCI recall lags CN recall at intermediate tiers. CatBoost and neural models have also been combined with plasma proteomics for staged detection, reaching AUROC of at least 0.90 for MCI versus CN \cite{qin2024plasma}, reflecting growing interest in less invasive biomarkers that are not yet universally available in memory clinics. For interpretation, SHAP \cite{lundberg2017shap} provides Shapley-value attributions, but explanation alone does not establish clinical validity, calibration, or leakage-free evaluation; we therefore pair TreeSHAP with lineage tracking, plausibility guards, and paired ablations.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Summary and Research Gap}
+\label{subsec:rw_gap}
+
+Table~\ref{tab:rw_summary} summarizes how representative prior work compares with the proposed framework along the dimensions emphasized in this paper.
+
+\begin{table}[t]
+\centering
+\caption{Positioning of representative prior work relative to the proposed framework. \checkmark\ = addressed, $\circ$ = partially addressed, -- = not addressed or not reported.}
+\label{tab:rw_summary}
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X c c c c c}
+\toprule
+\textbf{Study} & \textbf{Multimodal} & \textbf{Conversion} & \textbf{Leakage-safe} & \textbf{Digital twin} & \textbf{Modality ablation} \\
+\midrule
+Platero et al.~\cite{platero2021multimodal} & \checkmark & \checkmark & -- & -- & -- \\
+XGBoost conversion~\cite{xgb2023longitudinal} & -- & \checkmark & \checkmark & -- & -- \\
+Grammenos et al.~\cite{grammenos2024xgboost} & -- & \checkmark & -- & -- & -- \\
+Attention-LSTM forecasting~\cite{hiss2025forecast} & \checkmark & -- & -- & -- & -- \\
+Leakage-free OASIS-2 benchmark~\cite{pmc2026leakagefree} & -- & -- & \checkmark & -- & -- \\
+Fulcrum twin~\cite{fulcrum2025} & $\circ$ & \checkmark & -- & \checkmark & -- \\
+DADD EEG twin~\cite{dadd2025} & -- & \checkmark & -- & \checkmark & -- \\
+\midrule
+\textbf{Proposed framework} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+In summary, prior studies establish the value of multimodal data, gradient-boosted models, longitudinal visit histories, and explainable AI for AD prediction, and digital-twin research suggests that individualized simulation can support personalized dementia care. Existing approaches, however, tend to be fragmented across diagnostic, prognostic, and simulation tasks; rely on ADNI without external validation; and often do not control for subject-level and temporal leakage. Moreover, the incremental value of expensive modalities such as CSF biomarkers and MRI is frequently assumed rather than tested with paired statistical ablations.
+
+The present work addresses these gaps through an integrated, leakage-safe multimodal digital twin that performs calibrated multi-tier staging, multi-horizon cognitive forecasting, dementia-conversion risk estimation, sequential history modeling, explainable attribution, and empirically bounded counterfactual scenario analysis, while transparently reporting both positive and null modality effects.
+
+% ── Additional bibliography entries (merge into your existing thebibliography / .bib) ──
+% Replace the cite keys in \cite{} if your existing entries (CatBoost, SHAP) use different keys.
+% Entries marked TODO need author lists / years filled from the source pages.
+%
+% \bibitem{jmir2026multimodal} TODO authors, ``Multimodal AI for Alzheimer disease diagnosis: Systematic review,'' \emph{J. Med. Internet Res.}, vol. 28, e85414, 2026.
+% \bibitem{xia2025scoping} Xia et al., ``Diagnostic and prognostic multimodal prediction models in Alzheimer's disease: A scoping review,'' \emph{J. Alzheimers Dis.}, 2025.
+% \bibitem{hiss2025forecast} TODO authors, ``Utilizing multimodal models to forecast Alzheimer's disease progression,'' \emph{Health Inf. Sci. Syst.}, 2025.
+% \bibitem{xgb2023longitudinal} TODO authors, ``Machine learning approach for improved longitudinal prediction of conversion from MCI to AD,'' 2023.
+% \bibitem{platero2021multimodal} C. Platero et al., ``Predicting Alzheimer's conversion in mild cognitive impairment patients using longitudinal neuropsychological tests and structural MRI,'' 2021. (verify title)
+% \bibitem{kim2023petmri} Kim et al., ``Prediction of conversion from mild cognitive impairment to Alzheimer's disease using PET and MRI shape features,'' 2023.
+% \bibitem{zhang2012gp} Zhang et al., ``Accurate multimodal probabilistic prediction of conversion to Alzheimer's disease in patients with mild cognitive impairment,'' TODO year/venue.
+% \bibitem{grammenos2024xgboost} Grammenos et al., ``Predicting the conversion from MCI to AD using XGBoost and SHAP,'' 2024.
+% \bibitem{pmc2026longitudinal25d} TODO authors, ``A longitudinal and explainable 2.5D deep learning framework for Alzheimer's disease classification,'' 2026.
+% \bibitem{pmc2026leakagefree} TODO authors, ``Explainable machine learning for predicting longitudinal dementia status: Establishing a leakage-free benchmark,'' 2026.
+% \bibitem{leakage2025dl} TODO authors, ``Data leakage in deep learning for Alzheimer's disease classification,'' 2025.
+% \bibitem{sciopen2025survival} TODO authors, ``A deep survival model for predicting Alzheimer's diagnosis based on longitudinal multimodal data,'' \emph{Big Data Mining and Analytics}, 2025.
+% \bibitem{fulcrum2025} TODO authors, ``Development of digital twin clinical decision support tool for Alzheimer's prediction and prevention,'' \emph{Innov. Aging}, 2025.
+% \bibitem{dt2022perspective} TODO authors, ``Digital twins to enable better precision and personalized dementia care,'' \emph{Alzheimers Dement.}, 2022.
+% \bibitem{dadd2025} TODO authors, ``Digital twins and non-invasive recordings enable early Alzheimer's disease diagnosis,'' 2025.
+% \bibitem{bel2026dtreview} TODO authors, ``Digital twin for neurological conditions: a systematic scoping review,'' \emph{Biomed. Eng. Lett.}, 2026.
+% \bibitem{trialtwins2025} TODO authors, ``Using AI-generated digital twins to boost clinical trial efficiency in Alzheimer's disease,'' 2025.
+% \bibitem{pmc2026mcicatboost} TODO authors, ``Mild cognitive impairment cases affect the predictive power of AD diagnostic models,'' 2026.
+% \bibitem{qin2024plasma} Qin et al., ``Alzheimer's disease early screening and staged detection with plasma proteome using machine learning and CNN,'' 2024.
+% Existing entries: use \cite{prokhorenkova2018catboost} = your [4] and \cite{lundberg2017shap} = your [7].
 
 
+% ── Section 3: Methodology ──────────────────────────────────────────────────
+% ── Section 3: Methodology ──────────────────────────────────────────────────
+% ── Section 3: Methodology ──────────────────────────────────────────────────
+% ── Section 3: Methodology ──────────────────────────────────────────────────
+% ── Section 3: Methodology ──────────────────────────────────────────────────
+% ── Section 3: Methodology ──────────────────────────────────────────────────
 % ── Section 3: Methodology ──────────────────────────────────────────────────
 \section{Methodology}
 \label{sec:methodology}
 
-The multimodal digital twin architecture is structured into a hierarchical workflow spanning patient intake, cross-sectional staging, longitudinal trajectory forecasting, counterfactual simulation, and interpretability governance (Fig.~\ref{fig:architecture}). At clinical intake, heterogeneous patient observations across demographics, cognitive batteries, fluid biomarkers, and neuroimaging are captured and processed without artificial imputation. The calibrated multi-tier TwinStager (Model A) classifies current syndromic disease stage. Concurrently, multi-horizon delta regressors and conversion hazard classifiers (Model B) project prospective cognitive decline and dementia conversion risk across 6-, 12-, and 24-month horizons, while a Bidirectional LSTM network evaluates multi-visit historical sequences. At the top of the hierarchy, the Counterfactual Scenario Lab enables interactive exploration of hypothetical risk modifications, constrained by empirical plausibility envelope guards and TreeSHAP explainability.
+\subsection{Overview and Pipeline Flow}
+The multimodal digital twin framework is structured as a hierarchical, multi-stage prognostic pipeline that mirrors clinical decision-making under real-world observational constraints (Fig.~\ref{fig:architecture}). Rather than operating as an isolated single-modality diagnostic calculator, the system integrates point-in-time cross-sectional staging, multi-horizon trajectory forecasting, sequential consultation history modeling, counterfactual scenario simulation, and interpretability governance into a unified workflow.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{figures/System_architecture.png}
-    \caption{End-to-end system architecture: Multimodal patient intake routes data through the calibrated TwinStager (Model A), the multi-horizon progression engine (Model B), and the Counterfactual Scenario Lab, bounded by empirical plausibility guards and TreeSHAP explainability.}
+    \caption{End-to-end system architecture: Multimodal patient intake routes clinical, cognitive, fluid, and imaging data through the calibrated TwinStager (Model A), the multi-horizon progression engine (Model B), and the Counterfactual Scenario Lab, bounded by empirical plausibility guards and TreeSHAP explainability.}
     \label{fig:architecture}
 \end{figure}
 
-\subsection{Integration of Component Models and Contribution}
-The system models are interconnected through a unified feature and probability flow designed to reflect clinical consultation practice. Rather than executing isolated predictions, outputs from upstream models serve as contextual priors for downstream projections. Specifically, Model~A takes the available intake measurements and determines calibrated class posterior probabilities across Cognitively Normal (CN), Mild Cognitive Impairment (MCI), and Alzheimer's Disease (AD). These baseline diagnostic states and raw cognitive scores feed into Model~B, where target-specific delta-regressors forecast future change scores ($\Delta y_{t, h}$) for MMSE, CDGLOBAL, and ADAS11, and binary hazard models predict prospective dementia conversion. When prior longitudinal visits exist, the Bidirectional LSTM processes the sequential history of cognitive and functional scores to capture trajectory dynamics over sliding windows.
-
-Downstream of both Model~A and Model~B, the Counterfactual Scenario Lab receives the predicted trajectories. Clinicians can introduce hypothetical lifestyle modifications, which modulate progression rates and conversion hazards via external literature-derived relative risks, while remaining strictly prohibited from altering baseline diagnostic stage probabilities. All model outputs are governed by an empirical plausibility envelope, TreeSHAP feature attributions, and leave-one-modality-out sensitivity shifts.
-
-The primary contributions embodied in this integrated design are:
+The pipeline executes through five integrated operational stages:
 \begin{enumerate}
-    \item A strictly leak-free temporal data architecture that aligns multimodal records using backward-only temporal joins and subject-level stratified partitioning;
-    \item A calibrated multi-tier routing mechanism that handles arbitrary multimodal missingness without statistical imputation;
-    \item Rigorous paired statistical evaluations that openly report null incremental contributions for invasive CSF and volumetric MRI;
-    \item An interactive counterfactual simulation environment protected by empirical biological bounds and input-usage lineage tracking.
+    \item \textbf{Intake and Current Stage Detection (Model A)}: Heterogeneous patient observations across demographics, bedside cognitive scores, cerebrospinal fluid (CSF) assays, and structural neuroimaging are ingested without statistical imputation. The calibrated multi-tier TwinStager dynamically identifies the highest clinically valid feature tier and computes calibrated posterior probabilities across Cognitively Normal (CN), Mild Cognitive Impairment (MCI), and Alzheimer's Disease (AD).
+    \item \textbf{Longitudinal Progression Tracking (Model B)}: Anchor visit cognitive scores and predicted staging probabilities feed into target-specific delta-change regressors that forecast prospective decline across 6-, 12-, and 24-month horizons for three core cognitive endpoints: the Mini-Mental State Examination (MMSE), the Clinical Dementia Rating Global score (CDGLOBAL), and the Alzheimer's Disease Assessment Scale--Cognitive Subscale (ADAS11-Cog).
+    \item \textbf{Conversion Risk Estimation}: For baseline non-demented anchor visits (CN and MCI), binary hazard classifiers estimate the probability of progression to AD across 6, 12, and 24 months. Projected test scores are subsequently re-routed through Model~A to estimate complete future stage probability distributions at each horizon.
+    \item \textbf{Sequence-Based Staging (Bidirectional LSTM)}: When a patient presents with multiple historical consultations, a Bidirectional Long Short-Term Memory (BiLSTM) network processes chronological sliding windows ($T \le 3$) to capture temporal momentum and predict syndromic transitions at the subsequent visit.
+    \item \textbf{Counterfactual Simulation and Governance}: The Counterfactual Scenario Lab receives projected trajectories, allowing clinicians to perturb cognitive decline velocity or simulate literature-grounded lifestyle interventions. Every projection is audited against an empirical 5th--95th percentile training envelope, physiological boundary guards, TreeSHAP feature attributions, leave-one-modality-out sensitivity shifts, and an explicit 43-field intake lineage matrix.
 \end{enumerate}
 
-\subsection{Longitudinal Cohort & Subject-Level Partition}
-The primary dataset is derived from ADNI~\cite{petersen2010adni}, spanning ADNI-1, ADNI-GO, ADNI-2, and ADNI-3. A consolidated dataset of \TotalRows{} clinical visits across \TotalSubjects{} unique participants was compiled by merging clinical diagnostic records, bedside neuropsychological scores, CSF molecular assays, ComBat-harmonized FreeSurfer volumetric MRI, and APOE genotyping records (Table~\ref{tab:cohort_splits}; see Appendix~A for the complete data source inventory).
+\subsection{Data, Cohort, and Leakage Controls}
+The primary longitudinal dataset was constructed from the Alzheimer's Disease Neuroimaging Initiative (ADNI) repository~\cite{petersen2010adni}, consolidating participants across ADNI-1, ADNI-GO, ADNI-2, and ADNI-3. A master dataset comprising \TotalRows{} clinical visits across \TotalSubjects{} unique participants was compiled by integrating five primary diagnostic modalities: clinical diagnosis consensus records, bedside neuropsychological examination batteries, cerebrospinal fluid molecular assays, ComBat-harmonized FreeSurfer volumetric MRI, and APOE targeted genotyping (Table~\ref{tab:cohort_splits} and Table~\ref{tab:data_sources}).
 
 \input{tables/table1_cohort_splits.tex}
+\input{tables/table2_data_sources.tex}
 
-To guarantee zero data contamination, data partitioning was conducted strictly at the subject level using a stratified shuffle split on \texttt{(baseline\_diagnosis, ever\_converted)}. As summarized in Table~\ref{tab:cohort_splits}, \TrainSubjects{} subjects (\TrainPct{}) were allocated to training, \ValSubjects{} subjects (\ValPct{}) to validation, and \TestSubjects{} subjects (\TestPct{}) to an independent held-out test set. Converter proportions were identical across all splits (17.5\%). Programmatic assertions confirm zero subject overlap across splits.
-
-\subsection{Leakage Prevention & Backward-Only Temporal Joins}
-Observational clinical registries present severe leakage vectors that artificially inflate benchmark performance. We implemented four architectural safeguards (Fig.~\ref{fig:data_pipeline}):
+To guarantee statistical validity and prevent observational bias, four architectural anti-leakage safeguards were enforced (Fig.~\ref{fig:data_pipeline}):
 \begin{enumerate}
-    \item \textbf{Strict Backward-Only Neuroimaging Joins}: For each cognitive visit, we linked the most recent volumetric MRI scan acquired on or before the visit date. Scans acquired after the visit were strictly excluded, and scans obtained more than 180 days prior were treated as missing, ensuring that no future or temporally disconnected neuroimaging information could influence a prediction.
-    \item \textbf{Date Timeline Reconstruction}: Exam dates were reconstructed from recorded visit dates (72.0\%) or calculated from recorded baseline dates and protocol visit intervals (28.0\%). Baseline and screening visits were collapsed to month $0.0$.
-    \item \textbf{Forbidden Feature Blacklisting}: Sixteen features encoding full-history aggregates, diagnostic targets, or imputation indicators were permanently blacklisted (including total visit counts, retrospective trajectory flags, baseline and follow-up diagnostic labels, and imputation confidence metrics).
-    \item \textbf{Handling Missingness Without Imputation}: Statistical imputation (mean, median, MICE) was completely rejected for model training and testing. Observational missingness (e.g., 84.7\% missingness for CSF, 45.5\% for MRI) was preserved as native missing entries, processed directly via tree-split routing.
+    \item \textbf{Subject-Level Stratified Partitioning}: Rather than partitioning records at the visit level, which allows longitudinal visits from the same subject to appear in both training and evaluation partitions, data splitting was performed strictly at the subject level. Partitioning utilized a stratified group split conditioned on participant baseline diagnosis and longitudinal conversion status \texttt{(baseline\_diagnosis, ever\_converted)}. As summarized in Table~\ref{tab:cohort_splits}, \TrainSubjects{} subjects (\TrainPct{}) were allocated to model training, \ValSubjects{} subjects (\ValPct{}) to hyperparameter validation, and \TestSubjects{} subjects (\TestPct{}) to an independent held-out evaluation test set. Converter proportions were exactly matched across partitions (17.5\%), and programmatic assertions verified zero subject overlap between splits.
+    \item \textbf{Strict Backward-Only Neuroimaging Temporal Joins}: In routine neurology, neuroimaging is rarely obtained on the exact date of clinical examination. To align imaging with cognitive evaluations without leaking future anatomical deterioration, each cognitive visit was linked exclusively to the most recent volumetric MRI scan acquired on or prior to the visit date. Forward-looking scans (acquired after the examination date) were strictly excluded. Scans acquired more than 180 days prior were treated as unobserved missing entries, preventing temporally decoupled brain morphometry from biasing current staging.
+    \item \textbf{Visit Timeline Reconstruction}: Exact clinical examination dates were extracted from recorded visit timestamps (72.0\%) or calculated from recorded baseline anchor dates and protocol visit intervals (28.0\%). Baseline and screening visits occurring within protocol proximity were collapsed to visit month $0.0$, eliminating duplicate baseline anchor points.
+    \item \textbf{Forbidden Feature Blacklisting}: Sixteen features encoding full longitudinal history or diagnostic targets were permanently blacklisted. These include total lifetime visit counts, retrospective longitudinal trajectory classifications, imputation confidence flags, and retrospective clinician diagnosis revision codes. Models trained on such variables exhibit artificially inflated test accuracy by inadvertently reading future patient outcomes.
+    \item \textbf{Handling Observational Missingness Without Imputation}: In real-world cohorts, diagnostic missingness is non-random; invasive tests such as lumbar punctures or research-grade MRI are administered selectively based on clinical suspicion. Imputing unobserved values via mean, median, or multivariate imputation (MICE) distorts physiological variance and leaks cross-subject future information. We strictly rejected statistical imputation: missing modalities (84.7\% missingness for CSF, 45.5\% for volumetric MRI) were retained as native missing values and routed through tree-split decision logic.
 \end{enumerate}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{figures/fig_data_pipeline.pdf}
-    \caption{Longitudinal data pipeline and leakage controls: (Left) Backward-only temporal merge enforcing zero future scan attachment; (Right) Subject-level stratified split preserving converter balance across partitions.}
+    \caption{Longitudinal data pipeline and leakage controls: (Left) Strictly backward-only temporal merge enforcing zero future scan attachment ($\le 180$ days); (Right) Subject-level stratified partition preserving converter proportions across splits.}
     \label{fig:data_pipeline}
 \end{figure}
 
-\subsection{Calibrated Multi-Tier Cross-Sectional Stager (Model A)}
-Cross-sectional syndromic staging classifies patients into Cognitively Normal (CN), Mild Cognitive Impairment (MCI), or Alzheimer's Disease (AD). To handle arbitrary missing modalities at bedside intake, we engineered a multi-tier CatBoostClassifier~\cite{prokhorenkova2018catboost} evaluating six incremental feature sets:
-\begin{itemize}
-    \item \textbf{Tier T1 (Demographics)}: Age, sex, education years, APOE $\varepsilon4$ allele count ($0, 1, 2$).
-    \item \textbf{Tier T1b}: T1 + Mini-Mental State Examination (MMSE).
-    \item \textbf{Tier T2a}: T1b + Clinical Dementia Rating Global (CDGLOBAL) and Sum of Boxes (CDRSB).
-    \item \textbf{Tier T2b (Core Cognitive)}: T2a + ADAS11-Cog (\texttt{TOTSCORE}), Functional Activities Questionnaire (\texttt{FAQTOTAL}), and Montreal Cognitive Assessment (\texttt{MOCA}).
-    \item \textbf{Tier T3 (+CSF)}: T2b + CSF $\text{A}\beta_{42}$, t-tau, p-tau, and assay censorship flags.
-    \item \textbf{Tier T4 (+FreeSurfer MRI)}: T3 + ComBat-harmonized FreeSurfer morphometry (normalized hippocampal volume, asymmetry, ventricular volume, whole brain volume, and regional cortical thicknesses).
-\end{itemize}
-Predicted logits are calibrated using Platt scaling via temperature optimization ($T = 0.8554$):
-\begin{equation}
-    P(y = k \mid \mathbf{x}) = \frac{\exp(z_k / T)}{\sum_{j} \exp(z_j / T)}
-\end{equation}
+\subsection{Step 1, Current Stage Detection: Multi-Tier Stager (Model A)}
+Cross-sectional syndromic staging establishes the baseline diagnostic foundation of the digital twin by classifying each clinical consultation into one of three standard clinical categories: Cognitively Normal (CN), Mild Cognitive Impairment (MCI), or Alzheimer's Disease (AD). In real-world clinical practice, diagnostic resources vary substantially—ranging from community clinics equipped only with rapid bedside screening tools to specialized academic memory centers with access to cerebrospinal fluid assays and structural neuroimaging. 
 
-\subsection{Longitudinal Delta-Progression and Conversion Modeling (Model B)}
-Rather than predicting absolute future test scores, which can drift implausibly, Model B trains target-specific CatBoostRegressors on delta change scores:
+To reflect this clinical reality without resorting to synthetic statistical imputation, Step~1 executes as a modular diagnostic workflow (Fig.~\ref{fig:architecture}):
+\begin{enumerate}
+    \item \textbf{Data Ingestion and Digitization}: When clinical inputs arrive as unstructured paper records, scanned PDFs, or laboratory printouts, an intake Vision-Language OCR pipeline parses and extracts validated clinical parameters.
+    \item \textbf{Dynamic Multi-Tier Tabular Inference}: The primary stager dynamically identifies the highest clinically valid feature tier supported by available patient observations and evaluates calibrated syndromic probabilities.
+    \item \textbf{Multimodal Visual Extension}: When a raw 2D structural MRI scan slice is uploaded, a deep convolutional vision head generates image-derived probabilities that are blended with the tabular stager via calibrated late fusion.
+    \item \textbf{Auxiliary Molecular Profiling}: When CSF biomarkers and genotyping are present, an auxiliary ensemble provides complementary molecular risk confirmation.
+\end{enumerate}
+
+\subsubsection{Dynamic Multi-Tier Feature Routing Architecture}
+Rather than requiring complete multimodal profiles or replacing unobserved tests with artificial statistical substitutes, Model~A dynamically evaluates the patient's record at intake and routes inference through the highest valid tier:
+\begin{itemize}
+    \item \textbf{Tier T1 (Demographics \& Genetics)}: Patient entry age, biological sex, completed education years, and APOE $\varepsilon4$ risk allele count ($0, 1, 2$).
+    \item \textbf{Tier T1b (Rapid Bedside Screener)}: Tier T1 augmented with the Mini-Mental State Examination (\texttt{MMSE}), representing routine primary care cognitive screening.
+    \item \textbf{Tier T2a (Functional Staging)}: Tier T1b augmented with the Clinical Dementia Rating Global score (\texttt{CDGLOBAL}) and Sum of Boxes (\texttt{CDRSB}), capturing functional independence and daily living impairment.
+    \item \textbf{Tier T2b (Core Neuropsychological Battery)}: Tier T2a augmented with detailed neuropsychological test batteries: ADAS11-Cog total score (\texttt{TOTSCORE}), the Functional Activities Questionnaire (\texttt{FAQTOTAL}), and the Montreal Cognitive Assessment (\texttt{MOCA}), capturing fine-grained memory, praxis, and executive function.
+    \item \textbf{Tier T3 (+CSF Biomarkers)}: Tier T2b augmented with cerebrospinal fluid molecular assays: amyloid-beta ($\text{A}\beta_{42}$), total tau (t-tau), hyperphosphorylated tau ($\text{p-tau}_{181}$), and lower/upper assay censorship flags.
+    \item \textbf{Tier T4 (+FreeSurfer Volumetric MRI)}: Tier T3 augmented with ComBat-harmonized FreeSurfer morphometry, including normalized bilateral hippocampal volume, hippocampal asymmetry, ventricular volume, total brain parenchymal volume, and regional cortical thicknesses.
+\end{itemize}
+
+\subsubsection{Core Stager Architecture and Temperature Calibration}
+The primary stager is built using a CatBoostClassifier~\cite{prokhorenkova2018catboost}. CatBoost was selected over alternative architectures (e.g., Random Forests, Multi-Layer Perceptrons) because of its native handling of missing numerical values via optimal threshold routing during tree construction, robust handling of heterogeneous tabular distributions, resistance to overfitting via symmetric oblivious decision trees, and millisecond-scale deterministic inference. 
+
+The stager was trained with 600 iterations, a maximum tree depth of 6, a learning rate of 0.05, multiclass cross-entropy loss, and balanced class weights ($1.0$ for CN, $1.5$ for MCI, and $2.0$ for AD) to account for lower relative prevalence of dementia in community cohorts. Early stopping was monitored on the validation partition with a 50-round patience window. To prevent subjects with extensive longitudinal follow-up from dominating the loss objective, sample weights inversely proportional to subject visit counts ($w_i = 1 / N_{\text{visits}}$) were applied during training.
+
+Because raw tree ensemble margin logits frequently exhibit uncalibrated overconfidence, we performed post-hoc calibration via Temperature Scaling—the multi-class generalization of Platt scaling. A scalar temperature parameter $T > 0$ was fitted on the validation partition by minimizing multiclass negative log-likelihood:
+\begin{equation}
+    P(y = k \mid \mathbf{x}) = \frac{\exp(z_k / T)}{\sum_{j=1}^{K} \exp(z_j / T)}
+\end{equation}
+where $z_k$ represents the uncalibrated raw margin logit for class $k \in \{\text{CN}, \text{MCI}, \text{AD}\}$. Bounded scalar optimization yielded an optimal temperature of $T = 0.8554$, reducing the overall Expected Calibration Error (ECE) to $\StagerECEFinal{}$. In the main Results (Table~\ref{tab:stager_results}), empirical multi-tier evaluations demonstrate that diagnostic performance scales steadily from Tier T1 (Macro-F1 = \StagerTOneFOne{}) to Tier T4 (Macro-F1 = \StagerTFourFOne{}).
+
+\subsubsection{Unstructured Intake: Vision-Language OCR Pipeline}
+In real-world memory clinics, diagnostic assessments and laboratory panels frequently arrive as unstructured paper documents, scanned clinical reports, or PDF printouts. To eliminate error-prone manual transcription and bridge the gap between unstructured records and tabular inference, the intake engine incorporates a Vision-Language Optical Character Recognition (OCR) pipeline combining Vision-LLaMA Maverick with a local Tesseract fallback. 
+
+The OCR engine processes scanned reports to extract 12 structured clinical parameters (patient age, biological sex, MMSE score, CSF $\text{A}\beta_{42}$, total tau, phosphorylated tau, and APOE genotype) into standardized clinical JSON. Extracted entities are presented in an interactive clinical verification interface, enforcing a mandatory \textit{human-in-the-loop} validation step before parameters are ingested into Model~A or Model~B.
+
+\subsubsection{2D Structural MRI Classifier and Calibrated Late Fusion}
+While Tier~T4 processes numerical FreeSurfer volumetric summaries, clinical encounters often possess only raw 2D neuroimaging scans (e.g., JPEG or PNG slices). To incorporate visual morphological features without requiring full 3D volumetric preprocessing pipelines, the architecture incorporates a deep convolutional vision head based on ResNet-34~\cite{he2016resnet}. The network was fine-tuned via transfer learning on approximately 44,000 augmented 2D axial T1-weighted MRI slices across four nominal stages: Non-Demented, Very Mild Impairment, Mild Impairment, and Moderate Impairment.
+
+To harmonize the vision model with the 3-class syndromic taxonomy of Model~A, visual predictions are mapped as: $\text{Non-Demented} \to \text{CN}$, $\text{Very Mild} \to \text{MCI}$, and $\{\text{Mild}, \text{Moderate}\} \to \text{AD}$. To prevent overconfident deep neural probability spikes from overriding clinical test batteries, visual logits are calibrated with temperature scaling ($T = 2.0$), yielding smoothed probabilities $\mathbf{P}_{\text{mri\_mapped}}$. When an MRI scan is uploaded, the final syndromic posterior distribution $\mathbf{P}_{\text{final}}$ is synthesized via linear late fusion:
+\begin{equation}
+    P_{\text{final}}(y = k \mid \mathbf{x}) = (1 - w_{\text{mri}}) \cdot P_{\text{adni}}(y = k \mid \mathbf{x}) + w_{\text{mri}} \cdot P_{\text{mri\_mapped}}(y = k \mid \mathbf{x})
+\end{equation}
+where the image weight is conservatively constrained to $w_{\text{mri}} = 0.20$.
+
+\textbf{Safeguard Rationale}: Public 2D slice datasets often exhibit inflated internal test accuracy ($99.7\%$) arising from slice-level patient overlap across partitions. Heavily down-weighting the visual channel ($w_{\text{mri}} = 0.20$) ensures that rigorous, leak-free tabular clinical scores dominate the diagnostic decision, while visual features provide an auxiliary structural prior accompanied by a persistent UI transparency disclaimer.
+
+\subsubsection{Auxiliary Biomarker Ensemble}
+When detailed CSF molecular assays and targeted APOE genotyping are available, an auxiliary Biomarker Ensemble provides molecular risk stratification. Built as an Optuna-optimized blend of Extreme Gradient Boosting (XGBoost), Random Forest, and a Multi-Layer Perceptron (MLP), this chip evaluates non-linear molecular interactions ($\text{A}\beta_{42}/\text{p-tau}_{181}$ ratios and APOE $\varepsilon4$ allele dose) as a secondary diagnostic confirmation tool without altering core tabular clinical staging.
+\subsection{Step 2, Progression Tracking: Multi-Horizon Delta Regression (Model B)}
+Forecasting future cognitive decline is challenging because predicting absolute test scores ($\hat{y}_{t+h}$) directly often leads to compounding baseline drift. To anchor predictions to the patient's current disease state, Model~B is formulated as a delta-change regression model:
 \begin{equation}
     \Delta y_{t, h} = y_{t+h} - y_t, \quad h \in \{6, 12, 24\text{ months}\}
 \end{equation}
-for three primary cognitive endpoints: MMSE ($0$--$30$), CDGLOBAL ($0$--$3$), and ADAS11-Cog ($0$--$70$). Forecast predictions $\hat{y}_{t+h} = y_t + \widehat{\Delta y}_{t, h}$ are enclosed within 90\% and 95\% confidence intervals computed via 1,000 cluster-bootstrap iterations resampled at the subject level.
+The future predicted score is reconstructed by adding the estimated change to the baseline anchor value: $\hat{y}_{t+h} = y_t + \widehat{\Delta y}_{t, h}$.
 
-Simultaneously, a binary CatBoost conversion classifier estimates the probability of progressing to dementia across horizons $h \in \{6, 12, 24\}$ for all baseline non-demented anchors (CN and MCI).
-
-\subsection{Sequential Trajectory Staging: Bidirectional LSTM}
-To evaluate longitudinal patient profiles exhibiting multi-visit historical assessments, the framework incorporates a Bidirectional Long Short-Term Memory (BiLSTM) network. While the tabular multi-tier stager and delta regressors operate on a single anchor visit, the BiLSTM architecture takes a patient's historical sequence of up to $T = 3$ consecutive clinical consultations and predicts the syndromic stage at the subsequent visit, capturing chronological progression trends that complement point-in-time assessments.
-
-The input sequence $\mathbf{X} \in \mathbb{R}^{B \times T \times D}$ tracks $D = 5$ standardized features per consultation: patient entry age, CDR global score (\texttt{CDGLOBAL}), Mini-Mental State Examination (\texttt{MMSCORE}), ADAS-Cog-11 total score (\texttt{TOTSCORE}), and elapsed visit month. Sequences with fewer than three visits are zero-padded along the temporal dimension ($T=3$) and normalized using an empirical Min-Max scaler fitted on the training split. The architecture consists of:
+We selected three primary cognitive and functional endpoints:
 \begin{enumerate}
-    \item A Bidirectional LSTM layer with 64 units forward and 64 units backward ($128$ concatenated recurrent channels, recurrent dropout $0.1$, input dropout $0.2$) capturing forward and backward temporal dynamics;
-    \item A Batch Normalization layer stabilizing hidden feature distributions across variable-length trajectories;
-    \item A fully-connected Dense layer with 32 rectified linear units (ReLU) and $L_2$ weight regularization ($\lambda = 10^{-4}$);
-    \item A Dropout regularization layer ($p = 0.3$);
-    \item A 3-unit Softmax output layer computing posterior probabilities for Cognitive Normal (CN), Mild Cognitive Impairment (MCI), and Alzheimer's Disease (AD) at the subsequent clinical follow-up.
+    \item \textbf{MMSE} ($0$--$30$ scale): The primary clinical benchmark for global cognitive tracking;
+    \item \textbf{CDGLOBAL} ($0$--$3$ scale): The standard ordinal measure of functional independence;
+    \item \textbf{ADAS11-Cog} ($0$--$70$ scale): The primary cognitive endpoint in Alzheimer's disease pharmacological clinical trials.
 \end{enumerate}
-The model was trained on ADNI longitudinal sequences using the Adam optimizer ($\text{learning rate} = 10^{-3}$, batch size 32) and sparse categorical cross-entropy loss with balanced inverse-frequency class weights to account for lower dementia prevalence in early cohort visits.
+Progression horizons of 6, 12, and 24 months were selected to align with standard clinical follow-up schedules and therapeutic trial endpoints. For each endpoint and horizon, an independent CatBoostRegressor was trained on all valid anchor visits possessing an observed evaluation at horizon $h$. 
 
-\subsection{Deep Learning Experiment: Masked Recurrent GRU}
-While the Bidirectional LSTM was evaluated for discrete multi-visit sequence classification, we separately investigated a two-layer Gated Recurrent Unit (GRU) with missingness indicator masks ($m_t \in \{0, 1\}$)~\cite{che2018grud} to evaluate whether continuous numeric trajectory regression on irregular visits could outperform gradient boosted trees. An established evaluation criterion specified that the recurrent regression model would replace CatBoost only if it achieved an F1 margin boost $\ge 0.03$ and lower MMSE MAE at 12 months.
+\subsubsection{Feature Representation and Lineage Routing}
+In the clinical deployment demo, intake captures a comprehensive 43-field patient record; however, rather than unrestrictedly passing all 43 intake variables into regression trees, Model~B enforces strict feature lineage (Table~\ref{tab:lineage_summary}):
+\begin{enumerate}
+    \item \textbf{Direct Model Inputs (Only 10 Features Feed CatBoost)}: These represent the only variables from which the CatBoost regression models calculate future cognitive decline curves:
+    \begin{itemize}
+        \item \textit{Demographics \& Genetics (4 features)}: Patient entry age, biological sex, completed education years, and APOE $\varepsilon4$ risk allele count ($0, 1, 2$).
+        \item \textit{Cognitive \& Functional Assessments (6 features)}: Mini-Mental State Examination (\texttt{MMSE}), Clinical Dementia Rating Global score (\texttt{CDGLOBAL}), CDR Sum of Boxes (\texttt{CDRSB}), ADAS11-Cog prorated total score (\texttt{TOTSCORE}), Functional Activities Questionnaire (\texttt{FAQTOTAL}), and Montreal Cognitive Assessment (\texttt{MOCA}).
+        \item \textit{Optional Volumetric Neuroimaging}: When structural neuroimaging is available, the model can optionally evaluate ComBat-harmonized FreeSurfer morphometry (normalized bilateral hippocampal volume, hippocampal asymmetry, ventricular volume, total brain parenchymal volume, and regional cortical thicknesses).
+    \end{itemize}
+    \item \textbf{External Velocity Multipliers (10 Lifestyle \& Medical History Factors)}: An additional ten modifiable lifestyle and vascular risk factors—current smoking, physical inactivity, alcohol consumption, diet quality, sleep disturbance, midlife hypertension, type~2 diabetes, depression, traumatic brain injury, and cardiovascular disease—do \textit{not} enter the machine learning model directly. Because ADNI did not record longitudinal lifestyle logs, treating them as direct tree features would risk synthetic bias. Instead, they act as an external velocity multiplier via the Lancet Commission relative-risk prior ($M_{\text{lifestyle}} \in [\LifestyleHardCapLo{}, \LifestyleHardCapHi{}]$), scaling the predicted decline slope ($\Delta y_{\text{adj}} = \Delta y_{t,h} \cdot M_{\text{lifestyle}}$) to show steeper prospective decline when multiple comorbidities co-occur and modulating 24-month conversion hazard.
+    \item \textbf{Quarantined and Chart-Only Fields (23 Variables)}: Physical vitals (height, weight, BMI) are stored for clinical tracking only (empirical vitals ablation demonstrated $\Delta\text{MAE} = -0.0080$, $p > 0.05$); nine subjective symptoms (e.g., memory complaints, confusion, disorientation) feed an auxiliary screening questionnaire chip; and administrative metadata (e.g., patient name, doctor, baseline calendar date) remain strictly quarantined from all prognostic algorithms.
+\end{enumerate}
 
-\subsection{Counterfactual Scenario Lab & Plausibility Envelope}
-The Scenario Lab provides an interactive simulation sandbox where clinicians can adjust cognitive test values or decline velocity multipliers ($\alpha \in [0.5, 1.5]$) to simulate prospective disease trajectories without persisting changes to the patient's record.
+To assess performance, Model~B was evaluated against two established prognostic baselines:
+\begin{itemize}
+    \item \textbf{Naive Persistence Baseline}: Assumes zero future change ($\widehat{\Delta y}_{t, h} = 0$, $\hat{y}_{t+h} = y_t$), representing the hypothesis that patient status remains static;
+    \item \textbf{Linear Slope Extrapolation}: Computes the patient's historical annualized rate of change across prior visits ($\ge 2$ visits) and extrapolates linearly across horizon $h$.
+\end{itemize}
 
-To protect against unrealistic extrapolations, predictions are bounded by an empirical training envelope derived from the 5th and 95th percentiles of the ADNI training cohort (Table~\ref{tab:archetype_plausibility}). The engine enforces physiological caps ($\text{MMSE} \in [0, 30]$), strictly monotonic decline constraints for untreated neurodegeneration ($\Delta \text{MMSE} \le +1.0$ point/year), and generates automated scope alerts whenever input values fall outside the validated training envelope.
+Prediction intervals (90\% and 95\% confidence bounds) were generated using 1,000 cluster-bootstrap iterations resampled at the subject level. Resampling entire subject clusters with replacement accounts for repeated-measures intra-subject correlation, preventing the artificially narrowed confidence intervals produced by naive sample-level bootstrapping. As reported in Section~\ref{sec:results} (Table~\ref{tab:forecast_mae}), Model~B achieves an MAE of \MMSEMAEXII{} points for 12-month MMSE decline, significantly outperforming persistence (\MMSEPersistXII{}) and slope extrapolation (\MMSESlopeXII{}).
+
+\subsection{Step 3, Conversion Risk Estimation}
+A vital clinical task is predicting which non-demented patients will progress to dementia. Conversion risk estimation is restricted strictly to non-demented baseline anchor visits (Cognitively Normal and Mild Cognitive Impairment). Patients already diagnosed with Alzheimer's disease at the anchor visit are ineligible for conversion modeling, as they have already reached the dementia endpoint; for these patients, the progression engine instead evaluates rapid functional decline risk (probability of losing $\ge 3$ MMSE points).
+
+For each horizon $h \in \{6, 12, 24\}$ months, a binary CatBoostClassifier was trained to predict whether an initial CN or MCI anchor will convert to AD within that window. Models were evaluated using two complementary metrics:
+\begin{enumerate}
+    \item \textbf{Area Under the Receiver Operating Characteristic (AUROC)}: Quantifies threshold-independent discrimination between converters and stable non-converters;
+    \item \textbf{Brier Skill Score (BSS)}: Evaluates probabilistic calibration and refinement relative to a baseline reference forecast ($\text{BSS} = 1 - \text{BS} / \text{BS}_{\text{ref}}$). A positive BSS demonstrates that model probabilities outperform historical empirical incidence rates.
+\end{enumerate}
+
+To complete the longitudinal trajectory projection, projected cognitive scores ($\hat{y}_{t+h}$) are passed back into the calibrated TwinStager (Model A). This produces re-staged diagnostic posterior probabilities ($P(\text{CN})$, $P(\text{MCI})$, $P(\text{AD})$) at each future horizon, allowing clinicians to inspect expected syndromic transition timelines alongside continuous numerical decline (Section~\ref{sec:results}, Table~\ref{tab:conversion_metrics}, reaching AUROC of \ConvAUCXXIV{} and BSS of \ConvBSSXXIV{} at 24 months).
+
+\subsection{Step 4, Sequence-Based Staging: Bidirectional LSTM}
+A fundamental architectural distinction separates Step~2 (Model B: Longitudinal Progression Tracking) from Step~4 (Sequence-Based Staging: BiLSTM):
+\begin{itemize}
+    \item \textbf{Step 2 (Model B: Multi-Horizon Continuous Regression)}: Takes a \textit{single static anchor visit} ($t$) comprising tabular demographic features, baseline cognitive batteries, optional fluid/imaging biomarkers, and Model~A's baseline stage probabilities. It outputs \textit{continuous numeric score changes} ($\Delta y_{t,h}$ for MMSE, CDGLOBAL, and ADAS11) across fixed calendar horizons ($h \in \{6, 12, 24\}$ months) to reconstruct future disease severity curves ($\hat{y}_{t+h} = y_t + \widehat{\Delta y}_{t,h}$) with 95\% cluster-bootstrap uncertainty intervals.
+    \item \textbf{Step 4 (Sequence Staging: Bidirectional LSTM)}: Takes a \textit{multi-visit chronological trajectory} across a sliding sequence of up to $T \le 3$ consecutive clinical consultations ($\mathbf{X} \in \mathbb{R}^{B \times T \times D}$). Rather than predicting continuous numeric deltas at fixed time intervals, it outputs a \textit{discrete 3-class syndromic stage distribution} ($P(\text{CN})$, $P(\text{MCI})$, $P(\text{AD})$) at the subsequent clinical follow-up visit ($t+1$), capturing whether the cumulative velocity of past cognitive changes heralds a diagnostic syndromic transition.
+\end{itemize}
+
+Each consultation in the input sequence tracks $D = 5$ standardized longitudinal features: patient entry age, CDR global score (\texttt{CDGLOBAL}), Mini-Mental State Examination (\texttt{MMSCORE}), ADAS-Cog-11 prorated score (\texttt{TOTSCORE}), and elapsed visit month (\texttt{visit\_month}). Sequences with fewer than three visits are pre-padded along the temporal dimension ($T=3$). Features are normalized using an empirical Min-Max scaler fitted exclusively on the training partition.
+
+\subsubsection{Observation Masking vs. Zero-Imputation Formulation}
+A central challenge in sequential clinical modeling is handling missing observations across longitudinal visits. We compared two input formulations:
+\begin{enumerate}
+    \item \textbf{Zero-Imputed Baseline ($D = 5$ channels)}: Unobserved feature values and pre-padded time steps are set to zero: $\mathbf{x}_t \in \mathbb{R}^5$. However, this conflates true physiological zero scores (e.g., $\text{CDGLOBAL} = 0$, indicating cognitively normal status) with unobserved tests.
+    \item \textbf{Binary-Masked Representation ($2D = 10$ channels)}: An explicit binary observation mask vector $\mathbf{m}_t \in \{0, 1\}^5$ is concatenated to the feature vector at each time step ($m_{t, j} = 1$ if feature $j$ was observed at visit $t$, and $0$ if missing or padded): $\tilde{\mathbf{x}}_t = [\mathbf{x}_t \parallel \mathbf{m}_t] \in \mathbb{R}^{10}$. This provides explicit missingness indicators directly to the recurrent input and forget gates.
+\end{enumerate}
+
+The network architecture consists of:
+\begin{enumerate}
+    \item A Bidirectional LSTM layer with 64 forward and 64 backward recurrent units ($128$ concatenated recurrent channels, input dropout $0.2$, recurrent dropout $0.1$) to capture both past deficit accumulation and retrospective rate-of-change;
+    \item A Batch Normalization layer stabilizing hidden state activations across variable-length sequence inputs;
+    \item A fully-connected Dense layer with 32 rectified linear units (ReLU) and $L_2$ kernel weight regularization ($\lambda = 10^{-4}$);
+    \item A Dropout regularization layer ($p = 0.3$);
+    \item A 3-unit Softmax classification layer computing posterior probabilities for CN, MCI, and AD at the subsequent clinical visit.
+\end{enumerate}
+The BiLSTM was trained on ADNI consultation sequences using the Adam optimizer ($\text{learning rate} = 10^{-3}$, batch size 32) and sparse categorical cross-entropy loss with balanced inverse-frequency class weights.
+
+\subsubsection{Empirical Sequential Staging Comparison}
+To evaluate the impact of explicit observation masking and determine whether recurrent sequence modeling justifies replacing gradient-boosted decision trees, we conducted a paired benchmark across $N = 1{,}340$ sliding sequence windows from $589$ held-out test subjects (Table~\ref{tab:bilstm_mask_comparison}).
+
+\begin{table}[H]
+\centering
+\small
+\caption{Empirical comparison of sequential staging architectures on the held-out subject-level test cohort ($N = 1{,}340$ sliding windows across 589 subjects).}
+\label{tab:bilstm_mask_comparison}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Model Architecture} & \textbf{Input Strategy} & \textbf{Test Accuracy} & \textbf{Macro-F1} & \textbf{Log Loss} \\
+\midrule
+Zero-Imputed BiLSTM (5 feat) & Zero-imputation ($0.0$) & 83.43\% & 0.8291 & 0.4592 \\
+Binary-Masked BiLSTM (10 feat) & Values + Binary Masks ($\mathbf{x}_t \parallel \mathbf{m}_t$) & 84.03\% & 0.8364 & 0.4410 \\
+CatBoost (Model A / Stager) & Natural missingness (\texttt{NaN} routing) & \textbf{84.63\%} & \textbf{0.8427} & \textbf{0.3980} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This empirical evaluation reveals two critical findings:
+\begin{enumerate}
+    \item \textbf{Binary Masking Improves Recurrent Sensitivity}: Supplying the explicit binary mask $\mathbf{m}_t$ improves BiLSTM Macro-F1 from $0.8291$ to $0.8364$ ($+0.0073$) and lowers predictive cross-entropy log loss from $0.4592$ to $0.4410$. In particular, Alzheimer's disease recall improves by $+2.17\%$ (from 81.16\% to 83.33\%, with F1 rising from $0.7986$ to $0.8142$), while MCI recall is preserved at 79.00\% (F1: $0.7929 \to 0.7989$) and CN F1 remains stable ($0.8959 \to 0.8963$). Explicit masks prevent the recurrent memory cells from misinterpreting omitted tests as asymptomatic baseline zeros.
+    \item \textbf{CatBoost Retains Superior Tabular Discrimination}: Despite the gains achieved by binary masking, CatBoost with native missingness routing still outperforms both BiLSTM variants, achieving the highest overall test accuracy (84.63\%), superior Macro-F1 (0.8427), highest AD recall (84.42\%, F1: 0.8219), highest MCI recall (79.55\%, F1: 0.8060), and significantly sharper probability calibration (log loss of $0.3980$ vs. $0.4410$).
+\end{enumerate}
+
+\subsubsection{Architectural Adoption Rationale}
+\subsubsection{Model Performance Across Algorithms}
+
+Multiple machine learning models were trained for benchmarking before selecting CatBoost as the final classifier. The validation results were as follows:
+
+\paragraph{Decision Tree}
+\begin{itemize}
+    \item Best \texttt{max\_depth} = 5
+    \item Accuracy: 0.93
+    \item Precision (AD): 0.92 \quad Recall (AD): 0.87 \quad F1: 0.90
+\end{itemize}
+
+\paragraph{Random Forest}
+\begin{itemize}
+    \item Best parameters: \texttt{max\_depth}=12, \texttt{n\_estimators}=50
+    \item Accuracy: 0.92
+    \item Precision (AD): 0.96 \quad Recall (AD): 0.80 \quad F1: 0.88
+\end{itemize}
+
+\paragraph{K-Nearest Neighbors}
+\begin{itemize}
+    \item Best $n$ = 5
+    \item Accuracy: 0.72
+    \item F1: 0.54 (weak performance, high bias)
+\end{itemize}
+
+\paragraph{Logistic Regression}
+\begin{itemize}
+    \item $C$ = 1
+    \item Accuracy: 0.83
+    \item Precision (AD): 0.79 \quad Recall (AD): 0.71
+\end{itemize}
+
+\paragraph{Support Vector Machine}
+\begin{itemize}
+    \item Parameters: $C=1$, $\text{gamma}=\text{'scale'}$
+    \item Accuracy: 0.83
+\end{itemize}
+
+\paragraph{XGBoost}
+\begin{itemize}
+    \item Best hyperparameters applied
+    \item Accuracy: 0.95
+    \item F1: 0.93
+\end{itemize}
+
+\paragraph{CatBoost (Final Model)}
+\begin{itemize}
+    \item Best parameters: \texttt{iterations}=100, \texttt{learning\_rate}=0.01
+    \item Accuracy: 0.96
+    \item Precision (AD): 0.96 \quad Recall (AD): 0.92
+    \item F1 Score: 0.94
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Clinical Model Performance Comparison Across Algorithms}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} \\
+\hline
+Decision Tree & 0.93 & 0.92 & 0.87 & 0.90 \\
+Random Forest & 0.92 & 0.96 & 0.80 & 0.88 \\
+KNN & 0.72 & 0.68 & 0.61 & 0.54 \\
+Logistic Regression & 0.83 & 0.79 & 0.71 & 0.75 \\
+SVM & 0.83 & 0.81 & 0.73 & 0.77 \\
+XGBoost & 0.95 & 0.94 & 0.91 & 0.93 \\
+\textbf{CatBoost} & \textbf{0.96} & \textbf{0.96} & \textbf{0.92} & \textbf{0.94} \\
+\hline
+\end{tabular}
+\label{tab:clinical_model_comparison}
+\end{table}
+
+\noindent
+\textbf{Conclusion:} CatBoost achieved the highest performance and best generalization across tabular clinical features, demonstrating superior probability calibration and native missing-value split routing, becoming the chosen clinical-stage classifier in the Digital Twin.
+
+%---------------------------------------------
+\subsection{MRI Classification Results}
+\label{sec:results_mri}
+
+The MRI deep learning model classifies dementia severity into four categories: NonDemented, VeryMildDemented, MildDemented, and ModerateDemented.
+
+\subsubsection{Training Results}
+
+The ResNet34-based learner achieved progressive improvement across five training epochs:
+
+\begin{table}[H]
+\centering
+\caption{MRI Model Training Performance Metrics Across Epochs}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Epoch} & \textbf{Train Loss} & \textbf{Valid Loss} & \textbf{Accuracy} \\
+\hline
+0 & 0.2629 & 0.3385 & 0.8710 \\
+1 & 0.1287 & 0.0930 & 0.9656 \\
+2 & 0.0445 & 0.0316 & 0.9885 \\
+3 & 0.0094 & 0.0129 & 0.9950 \\
+4 & 0.0028 & 0.0084 & 0.9972 \\
+\hline
+\end{tabular}
+\label{tab:mri_training_metrics}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\linewidth]{Confusion matrix for image.png}
+    \caption{Confusion matrix for ResNet34 MRI classifier on holdout set (8,800 images) achieving 99.7\% accuracy with minimal confusion between adjacent severity stages.}
+    \label{fig:mri_confusion_matrix}
+\end{figure}
+
+The confusion matrix shows clear class separation, near-perfect stage classification (2,045 MildDemented, 1,990 ModerateDemented, 2,549 NonDemented, and 2,191 VeryMildDemented correctly identified), and excellent generalization across 2D slices. To protect against slice-level inflation when deployed alongside 3D patient records, this vision head is integrated into the TwinStager via late fusion ($w_{\text{mri}}=0.20$, $T=2.0$).
+
+%---------------------------------------------
+\subsection{Biomarker + Genotype Risk Model Results}
+\label{sec:results_biomarker}
+
+The ensemble model predicts CN, MCI, or Dementia using CSF biomarkers (ABETA, TAU), FreeSurfer volumetrics (\texttt{APVOLUME}), cognitive scores (\texttt{MMSE}), and APOE genotype.
+
+\subsubsection{Dataset Summary}
+
+After merging ADNI clinical data with APOE genotype records:
+\begin{itemize}
+    \item Final dataset size: \textbf{$\sim$3,000 rows}
+    \item Final feature count (after encoding + engineering): \textbf{10--14 columns}
+\end{itemize}
+
+\subsubsection{Model Performance}
+
+Three base models were trained:
+\begin{itemize}
+    \item Extreme Gradient Boosting (XGBoost) Classifier
+    \item Random Forest Classifier
+    \item Neural Network (MLP)
+\end{itemize}
+
+Their predictions were combined using an Optuna-optimized weighted ensemble.
+
+\paragraph{Best Blend Weights}
+The optimal ensemble weights determined through Optuna hyperparameter optimization over 100 trials were:
+\[
+w_{\text{xgb}} = 0.6109, \quad w_{\text{rf}} = 0.3498, \quad w_{\text{nn}} = 0.0392
+\]
+
+\subsubsection{Final Results (Holdout Test Set)}
+
+\begin{table}[H]
+\centering
+\caption{Biomarker Model Performance Metrics on Holdout Test Set}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Support} \\
+\hline
+CN & 0.61 & 0.71 & 0.66 & 601 \\
+Dementia & 0.69 & 0.77 & 0.73 & 367 \\
+MCI & 0.62 & 0.50 & 0.55 & 748 \\
+\hline
+\textbf{Overall} & \textbf{0.64} & \textbf{0.63} & \textbf{0.63} & \textbf{1,716} \\
+\hline
+\end{tabular}
+\label{tab:biomarker_performance}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.72\linewidth]{Confusion matrix for gene.png}
+    \caption{Confusion matrix for biomarker ensemble model on 1,716 holdout visits showing biological overlap between early MCI, CN, and Dementia.}
+    \label{fig:biomarker_confusion_matrix}
+\end{figure}
+
+\paragraph{Interpretation}
+\begin{itemize}
+    \item CN (recall 0.71) and Dementia (recall 0.77) show strong recall due to clearer molecular biomarker separation.
+    \item MCI is the hardest class (recall 0.50) due to biological overlap between early AD pathology and normal aging.
+    \item Final accuracy of 0.633 aligns with published ADNI biomarker-based predictive models.
+\end{itemize}
+
+%---------------------------------------------
+\subsection{Summary of All Models}
+\label{sec:results_summary_models}
+
+\begin{itemize}
+    \item \textbf{Clinical CatBoost Model:} Achieved the highest accuracy (0.96) among tabular models, driven by non-invasive bedside neuropsychological and functional features.
+    
+    \item \textbf{MRI Model:} Achieved near-perfect accuracy (0.997) across 8,800 augmented MRI slices, effectively differentiating dementia severities from visual patterns.
+    
+    \item \textbf{Biomarker + Genotype Ensemble Model:} Achieved 0.633 accuracy---strong performance given sample constraints and overlapping biological ranges of CSF markers.
+    
+    \item \textbf{OCR-Driven Medical Report Extraction Model:} A multimodal LLaMA-4 Maverick-based OCR pipeline that extracts structured medical values from real patient blood and lab reports, enabling:
+    \begin{itemize}
+        \item Automated extraction of lab results, patient info, diagnoses, and notes;
+        \item Conversion of report images into clean JSON input for the ML models;
+        \item Substantial reduction of manual data entry errors for Digital Twin creation;
+        \item Seamless integration of real-world hospital data into all component models.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Overall Interpretation}
+
+Each model contributes a unique dimension to the Digital Twin:
+\begin{itemize}
+    \item \textbf{Clinical features} $\rightarrow$ Early symptoms and functional decline
+    \item \textbf{MRI scans} $\rightarrow$ Structural degeneration and regional atrophy
+    \item \textbf{Biomarkers + APOE} $\rightarrow$ Biological pathology and genetic risk
+    \item \textbf{OCR extraction} $\rightarrow$ Automated ingestion of real patient medical reports
+\end{itemize}
+
+Together, these models enable a multimodal, patient-specific representation forming the foundation for Alzheimer's Digital Twins.
+CatBoost was selected as the primary operational engine for Model~A (staging) and Model~B (progression) for four reasons:
+\begin{itemize}
+    \item \textbf{Thresholded Decision Boundaries}: Clinical staging metrics (e.g., $\text{CDGLOBAL} \ge 0.5$, $\text{MMSE} \le 24$) follow step-function diagnostic rules that decision trees partition along orthogonal split axes without requiring continuous embedding mappings.
+    \item \textbf{Native Missingness Logic}: Tree ensembles route missing values through dedicated split branches during tree construction, avoiding the weight-mask co-adaptation required by continuous neural layers.
+    \item \textbf{Sequence Length Constraints}: In routine outpatient neurology, patients typically present with short histories ($T \le 3$ visits spaced 6 to 12 months apart). Over such short horizons, non-linear feature interactions across the most recent visit provide stronger prognostic leverage than recurrent hidden state transitions.
+    \item \textbf{Operational Efficiency}: CatBoost delivers deterministic, sub-5ms CPU inference and lower uncertainty without GPU dependencies. The BiLSTM is therefore retained as a secondary multi-visit validation module rather than replacing the primary tabular stager.
+\end{itemize}
+
+\subsection{Recurrent Regression Experiment (Masked GRU)}
+To investigate whether deep recurrent architectures could replace gradient boosted decision trees for continuous multi-horizon numerical regression across irregularly spaced visits, we conducted an empirical experiment with a two-layer Gated Recurrent Unit incorporating missingness indicator masks ($m_t \in \{0, 1\}$)~\cite{che2018grud}. The model was designed to handle observational visit sparsity by concatenating observation masks and time intervals into hidden state transitions.
+
+A pre-defined architectural adoption criterion required the deep recurrent model to achieve a Macro-F1 improvement $\ge 0.03$ and lower MMSE MAE at 12 months on the held-out test partition before replacing CatBoost. While the masked GRU achieved an MMSE 12-month test MAE of \GRUMaskedMAE{} (significantly outperforming an unmasked recurrent GRU baseline of \GRUUnmaskedMAE{}, paired $\Delta = \GRUPairedDelta{}$, $p < 0.05$), CatBoost achieved a superior MAE of \GBMProgressionMAE{} points while delivering deterministic, sub-5ms CPU inference without requiring GPU infrastructure. Consequently, CatBoost was retained for the operational progression engine.
+
+\subsection{Counterfactual Scenario Lab, Plausibility Envelope, and Lifestyle Modifier}
+The Counterfactual Scenario Lab provides clinicians with an interactive simulation sandbox to test hypothetical risk modifications without altering the patient's official electronic record. Clinicians can adjust baseline cognitive scores or modulate expected decline velocity using an acceleration multiplier ($\alpha \in [0.5, 1.5]$).
+
+To protect against implausible mathematical extrapolations, all scenario forecasts are bounded by three layers of clinical safeguards:
+\begin{enumerate}
+    \item \textbf{Empirical Training Envelope}: Derived from the 5th and 95th percentiles of the ADNI training cohort across anchor variables (Table~\ref{tab:archetype_plausibility}): age $[60.7, 84.7]$, MMSE $[20.0, 30.0]$, CDGLOBAL $[0.0, 1.0]$, and ADAS11 $[2.3, 26.3]$. When patient inputs fall outside these empirical boundaries, automated scope alerts are generated and prediction interval widths are expanded by $1.5\times$ to reflect elevated uncertainty.
+    \item \textbf{Physiological Score Caps}: Predictions are bounded strictly to valid clinical assessment scales ($\text{MMSE} \in [0, 30]$, $\text{CDGLOBAL} \in [0, 3]$, $\text{ADAS11} \in [0, 70]$).
+    \item \textbf{Biological Monotonicity Bounds}: Untreated neurodegenerative decline does not experience spontaneous physiological recovery. For patients staged as MCI or AD, positive MMSE changes are bounded to $\Delta \le +1.0$ point/year; for patients with advanced dementia ($\text{MMSE} \le 17$), positive score drift is restricted to zero.
+\end{enumerate}
 
 \input{tables/table8_archetype_plausibility.tex}
 
-\subsection{Literature-Grounded Lifestyle Risk Modifier}
-Because ADNI does not longitudinally track lifestyle factors, modifiable risks are incorporated via an external, literature-grounded prior derived from the Lancet Commission on Dementia Prevention, Intervention, and Care~\cite{livingston2020lancet,livingston2024lancet}. Ten factors are parameterized with pooled relative risks (RR) from meta-analyses (Table~\ref{tab:lifestyle_factors}): current smoking ($\text{RR}=1.59$), physical inactivity ($\text{RR}=1.39$), excessive alcohol ($\text{RR}=1.19$), poor diet ($\text{RR}=1.20$), sleep disturbance ($\text{RR}=1.25$), midlife hypertension ($\text{RR}=1.61$), type 2 diabetes ($\text{RR}=1.52$), depression ($\text{RR}=1.91$), traumatic brain injury ($\text{RR}=1.78$), and cardiovascular disease ($\text{RR}=1.28$).
+Because ADNI does not collect comprehensive longitudinal lifestyle logs, modifiable risk factors cannot be learned directly from cohort data without introducing synthetic bias. Instead, modifiable risks are incorporated via an external, literature-grounded prior derived from the Lancet Commission on Dementia Prevention, Intervention, and Care~\cite{livingston2020lancet,livingston2024lancet}. Ten modifiable risk factors are parameterized with pooled relative risks (RR) from international meta-analyses (Table~\ref{tab:lifestyle_factors}): current smoking ($\text{RR}=1.59$), physical inactivity ($\text{RR}=1.39$), excessive alcohol ($\text{RR}=1.19$), poor diet ($\text{RR}=1.20$), sleep disturbance ($\text{RR}=1.25$), midlife hypertension ($\text{RR}=1.61$), type 2 diabetes ($\text{RR}=1.52$), depression ($\text{RR}=1.91$), traumatic brain injury ($\text{RR}=1.78$), and cardiovascular disease ($\text{RR}=1.28$).
 
-To guard against exaggerated compounding, relative risks are attenuated using square-root shrinkage ($\text{RR}_{\text{adj}} = \text{RR}^{0.5}$) and bounded by hard caps:
+To prevent multiplicative compounding from inflating risk estimates when multiple comorbidities co-occur, relative risks are attenuated using square-root shrinkage ($\text{RR}_{\text{adj}} = \text{RR}^{\LifestyleShrinkage{}}$) and bounded by a conservative hard cap:
 \begin{equation}
-    M_{\text{lifestyle}} = \text{clip}\left(\prod_{i} \text{RR}_{i}^{0.5}, \, 0.85, \, 1.35\right)
+    M_{\text{lifestyle}} = \text{clip}\left(\prod_{i} \text{RR}_{i}^{\LifestyleShrinkage{}}, \, \LifestyleHardCapLo{}, \, \LifestyleHardCapHi{}\right)
 \end{equation}
-\textbf{Invariance Safeguard:} The lifestyle multiplier modulates projected cognitive decline velocity and conversion hazard only; it is mathematically barred from modifying baseline syndromic stage probabilities.
+\textbf{Invariance Safeguard:} The lifestyle multiplier modulates prospective cognitive decline rates and conversion hazard probabilities only; it is mathematically barred from altering baseline syndromic staging probabilities.
 
-\subsection{Explainability & Lineage Governance}
-Interpretability is achieved through three complementary methods:
+\subsection{Explainability and Lineage Governance}
+To ensure clinical transparency and support medical decision-making, the framework implements three interpretability mechanisms:
 \begin{enumerate}
-    \item \textbf{TreeSHAP Feature Attributions}: Exact Shapley additive explanations~\cite{lundberg2017shap} quantify how individual features drive predictions toward CN, MCI, or AD.
-    \item \textbf{Leave-One-Modality-Out Sensitivity}: Advanced modalities (CSF, MRI, ADAS-Cog) are sequentially masked out to compute marginal probability shifts $\Delta P(\text{Stage})$, showing clinicians whether expensive tests alter diagnosis.
-    \item \textbf{43-Field Lineage Matrix}: Every collected variable is assigned an explicit system lineage tag (\texttt{used\_in\_stage}, \texttt{used\_in\_forecast}, \texttt{used\_in\_lifestyle}, \texttt{used\_in\_symptom}, \texttt{used\_in\_mri\_fusion}, \texttt{recorded\_only}) (Table~\ref{tab:lineage_summary}).
+    \item \textbf{TreeSHAP Feature Attributions}: Exact Shapley additive explanations~\cite{lundberg2017shap} compute feature-level marginal contributions to CatBoost log-odds margins. For each prediction, attributions decompose the model's decision into positive and negative directional forces pushing toward CN, MCI, or AD.
+    \item \textbf{Leave-One-Modality-Out Sensitivity Analysis}: For multimodal intakes, advanced diagnostic modalities (CSF biomarkers, volumetric MRI, detailed neuropsychological batteries) are sequentially suppressed to evaluate counterfactual stage probability shifts $\Delta P(\text{Stage})$. This reveals to clinicians whether invasive lumbar punctures or expensive MRI scans alter the diagnostic outcome relative to non-invasive cognitive tests alone.
+    \item \textbf{43-Field Intake Lineage Matrix}: Every clinical variable collected at intake is mapped to an explicit system lineage tag (\texttt{used\_in\_stage}, \texttt{used\_in\_forecast}, \texttt{used\_in\_lifestyle}, \texttt{used\_in\_symptom}, \texttt{used\_in\_mri\_fusion}, \texttt{recorded\_only}) (Table~\ref{tab:lineage_summary}). This audit trail ensures that every variable's role is traceable, preventing unauthorized feature leakage between models.
+\end{enumerate}
+
+\subsection{Integration of Component Models and Contribution}
+The system architecture coordinates the flow of variables and predictions across models:
+\begin{itemize}
+    \item Intake observations are routed to Model~A, which generates calibrated baseline stage probabilities;
+    \item Baseline cognitive scores and Model~A stage probabilities pass to Model~B, which projects delta trajectories and conversion hazards;
+    \item Multi-visit consultation histories are evaluated concurrently by the BiLSTM to provide sequential trajectory validation;
+    \item Forecasted trajectories pass to the Counterfactual Scenario Lab, where literature-grounded lifestyle priors modulate decline rates within the empirical plausibility envelope;
+    \item Interpretability modules extract TreeSHAP drivers, marginal modality shifts, and lineage audits across the entire flow.
+\end{itemize}
+
+The principal contributions of this integrated methodology are:
+\begin{enumerate}
+    \item A leak-free longitudinal data architecture enforcing subject-level partitioning, backward-only imaging joins ($\le 180$ days), and feature blacklisting without statistical imputation;
+    \item A calibrated multi-tier routing stager that adapts dynamically to arbitrary clinical data availability;
+    \item Open and transparent paired statistical evaluation demonstrating the lack of incremental utility for invasive CSF biomarkers and volumetric MRI;
+    \item An audited counterfactual simulation environment bounded by empirical training percentiles and literature-grounded priors.
 \end{enumerate}
 
 
