@@ -3,7 +3,8 @@
 \caption{Clinical archetype benchmark: validation against empirical 5th--95th percentile training envelope and automated scope guards.}
 \label{tab:archetype_plausibility}
 \small
-\begin{tabular}{lp{3.5cm}rrrrp{3.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{3.2cm}rrrrp{3.5cm}}
 \toprule
 \textbf{Archetype} & \textbf{Baseline Scores} & \textbf{P(CN)} & \textbf{P(MCI)} & \textbf{P(AD)} & \textbf{12m MMSE [Bounds]} & \textbf{Reliability \& Scope Alerts} \\
 \midrule
@@ -13,4 +14,5 @@ Mild AD                 & Age 72, MMSE 20, CDR 1.0, ADAS 25, FAQ 15& 0.011 & 0.0
 Moderate AD             & Age 72, MMSE 16, CDR 1.0, ADAS 35, FAQ 18& 0.029 & 0.133 & \textbf{0.838} & 12.3 [$\le \text{curr}+1$] & \texttt{low}; alerts: MMSE 16 outside [20, 30]; ADAS 35 outside [2.3, 26.3]. \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}

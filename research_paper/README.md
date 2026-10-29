@@ -136,3 +136,4 @@ Before submitting the paper to a journal or conference, the authors must complet
 3. **Ethics Approval Protocol Number**: If required by the target journal, insert the specific Institutional Review Board (IRB) approval protocol reference numbers for your institution.
 4. **Funding & Competing Interests**: If external grants funded this project, replace the placeholder in Declarations with the formal grant number and agency name.
 5. **Double-Blind Anonymization**: If submitting to a double-blind peer-review venue (e.g., ACM CHIL or MICCAI), comment out author names, institutional affiliations, and the GitHub repository link.
+

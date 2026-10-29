@@ -84,3 +84,18 @@ The lifestyle risk modifier applies relative risk multipliers across 10 modifiab
 ### Cause & Resolution
 - **Grounding**: ADNI does not longitudinally record lifestyle behaviors. The modifier was not learned from ADNI; it is an external literature-grounded prior derived from the Lancet Commission on Dementia Prevention (Livingston et al., 2020, 2024 updates).
 - **Resolution in Paper**: Explicitly labeled in the abstract, methods, and Table~\ref{tab:lifestyle_factors} as an external literature prior.
+
+---
+
+## 7. Bidirectional LSTM Sequence Stager Integration & Table Margin Audit
+
+### Description
+The Bidirectional LSTM model (`server/ml/lstm_model/model_weights/lstm_model.keras`) is deployed as an active operational endpoint (`POST /lstm-predict`) powering the frontend temporal prediction tool (`client/app/temporal-prediction/`), but was omitted from the initial draft of Table 3. In addition, wide tables overflowed into the right margin when rendered in single-column article format.
+
+### Cause & Resolution
+- **Cause**: The Phase 2 rewrite initially focused on the primary CatBoost tabular stager (Model A) and multi-horizon regressors (Model B). The BiLSTM sequence stager is an active sequential deep learning model trained on 3-visit sliding windows ($T \le 3$) of 5 longitudinal features (`entry_age`, `CDGLOBAL`, `MMSCORE`, `TOTSCORE`, `visit_month`). Furthermore, unconstrained table column specifications exceeded the 15.92 cm text width of the 1-inch-margin A4 layout.
+- **Resolution**:
+  1. Added the `BiLSTM Sequence Stager` explicitly to Table 3 (`table3_model_inventory.tex`), containing all 6 audited dimensions: Component Model, Architecture, Input Modalities, Deployment Status, Training Cohort, and Primary Metric.
+  2. Integrated comprehensive narrative descriptions of the BiLSTM architecture in Section 1 (Introduction), Section 3.3 (Methodology), Section 4 (Results), and Appendix A (Model Architectures).
+  3. Wrapped all 11 tables in `\begin{adjustbox}{max width=\linewidth}` and re-balanced column widths in `research_paper/scripts/make_numbers.py` and `research_paper/preamble.tex`, guaranteeing zero margin overflow on Overleaf and local LaTeX compilers.
+

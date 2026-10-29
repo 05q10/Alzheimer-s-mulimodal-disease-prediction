@@ -3,6 +3,7 @@
 \caption{Longitudinal Progression Model B forecasting error (Mean Absolute Error, MAE) compared against naive persistence and linear slope extrapolation baselines on identical test anchors.}
 \label{tab:forecast_mae}
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llrrlrrr}
 \toprule
 \textbf{Target} & \textbf{Horizon} & \textbf{N Anchors} & \textbf{GBM Val} & \textbf{GBM Test MAE [95\% CI]} & \textbf{Persistence} & \textbf{Slope Extrap} & \textbf{Beats Persist?} \\
@@ -20,4 +21,5 @@
                 & 24 months & 664  & 3.446 & \textbf{3.120} [2.824, 3.441] & 3.665 & 6.253 & \textbf{YES} \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}

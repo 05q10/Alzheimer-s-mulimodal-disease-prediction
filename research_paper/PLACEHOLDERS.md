@@ -39,3 +39,4 @@
 - **Total Scientific Results Figures**: 14 figures (all generated from real observational test splits and saved model weights).
 - **Total UI Screenshot Placeholders**: 3 figures (generated as watermarked vector placeholders; replaceable via `SCREENSHOTS.md`).
 - **Synthetic or Invented Results**: **Zero**.
+

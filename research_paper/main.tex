@@ -37,14 +37,14 @@ Single-modality machine learning pipelines cannot adequately reconcile this temp
 
 To overcome these foundational limitations, the paradigm of the \textit{Digital Twin} has recently emerged in computational medicine~\cite{nasem2023digitaltwins}. A medical digital twin maintains an updatable, patient-specific computational representation synthesized from heterogeneous clinical observations, enabling clinicians to assess current disease stage, project prospective progression, and evaluate counterfactual interventions in an interactive sandbox.
 
-In this work, we present an end-to-end multimodal longitudinal digital twin framework for Alzheimer's disease staging and trajectory forecasting, built on \TotalRows{} visits across \TotalSubjects{} subjects from the Alzheimer's Disease Neuroimaging Initiative (ADNI)~\cite{petersen2010adni}. The framework addresses the clinical reality of observational missingness through a calibrated multi-tier stager (Model A) paired with multi-horizon delta-progression regressors and conversion hazard classifiers (Model B).
+In this work, we present an end-to-end multimodal longitudinal digital twin framework for Alzheimer's disease staging and trajectory forecasting, built on \TotalRows{} visits across \TotalSubjects{} subjects from the Alzheimer's Disease Neuroimaging Initiative (ADNI)~\cite{petersen2010adni}. The framework addresses the clinical reality of observational missingness through a calibrated multi-tier stager (Model A) paired with multi-horizon delta-progression regressors, conversion hazard classifiers (Model B), and an operational Bidirectional Long Short-Term Memory (BiLSTM) sequence stager for longitudinal history evaluation.
 
 \subsection{Key Contributions}
 The primary defensible contributions of this work are fourfold:
 \begin{enumerate}
     \item \textbf{Leakage-Free Multimodal Data Architecture}: A rigorous pipeline that standardizes \TotalRows{} ADNI visits across \TotalSubjects{} unique subjects using subject-stratified splits (\TrainPct{} train, \ValPct{} validation, \TestPct{} test), strictly backward-looking temporal MRI joins ($\le 180$ days offset), and complete exclusion of 16 forward-looking trajectory artifacts, avoiding statistical imputation.
     \item \textbf{Calibrated Multi-Tier Cross-Sectional Stager (Model A)}: A gradient-boosted diagnostic model that dynamically routes patient inference across diagnostic tiers (T1 to T4), achieving a held-out test Macro-F1 of \StagerTFourFOne{} (95\% CI: [\StagerTFourFCILo{}, \StagerTFourFCIHi{}]) with Platt-scaled probabilistic calibration ($\text{ECE} = \StagerECEFinal{}$).
-    \item \textbf{Longitudinal Delta-Progression and Conversion Modeling (Model B)}: Target-specific regressors forecasting numeric decline in MMSE, CDGLOBAL, and ADAS11-Cog across 6, 12, and 24 months. At 12 months, MMSE decline is forecasted with an MAE of \MMSEMAEXII{} points (95\% CI: [\MMSECILoXII{}, \MMSECIHiXII{}]), decisively outperforming persistence (\MMSEPersistXII{}) and slope extrapolation (\MMSESlopeXII{}). Conversion hazard models achieve 24-month AUROC of \ConvAUCXXIV{} [0.756, 0.861] with positive Brier Skill Scores (\ConvBSSXXIV{}).
+    \item \textbf{Longitudinal Progression, Conversion, and Sequential Modeling (Model B \& BiLSTM)}: Target-specific regressors forecasting numeric decline in MMSE, CDGLOBAL, and ADAS11-Cog across 6, 12, and 24 months. At 12 months, MMSE decline is forecasted with an MAE of \MMSEMAEXII{} points (95\% CI: [\MMSECILoXII{}, \MMSECIHiXII{}]), decisively outperforming persistence (\MMSEPersistXII{}) and slope extrapolation (\MMSESlopeXII{}). Conversion hazard models achieve 24-month AUROC of \ConvAUCXXIV{} [0.756, 0.861] with positive Brier Skill Scores (\ConvBSSXXIV{}). Complementing these tabular point-in-time predictors, an operational Bidirectional LSTM network evaluates multi-visit sliding windows of patient assessments to classify future syndromic state.
     \item \textbf{Clinical Explainability and Interactive Counterfactual Scenario Lab}: A governance suite featuring CatBoost TreeSHAP attributions, leave-one-modality-out marginal sensitivity analysis, full 43-field input-usage lineage tracking, an empirical 5th--95th percentile plausibility envelope guard, and an interactive simulation sandbox applying literature-grounded lifestyle priors from the Lancet Commission~\cite{livingston2024lancet}.
 \end{enumerate}
 
@@ -121,7 +121,7 @@ Predicted logits are calibrated using Platt scaling via temperature optimization
     P(y = k \mid \mathbf{x}) = \frac{\exp(z_k / T)}{\sum_{j} \exp(z_j / T)}
 \end{equation}
 
-\subsection{Multi-Horizon Progression Regressors & Conversion Hazard (Model B)}
+\subsection{Longitudinal Delta-Progression and Conversion Modeling (Model B)}
 Rather than predicting absolute future test scores, which can drift implausibly, Model B trains target-specific CatBoostRegressors on delta change scores:
 \begin{equation}
     \Delta y_{t, h} = y_{t+h} - y_t, \quad h \in \{6, 12, 24\text{ months}\}
@@ -130,8 +130,21 @@ for three primary cognitive endpoints: MMSE ($0$--$30$), CDGLOBAL ($0$--$3$), an
 
 Simultaneously, a binary CatBoost conversion classifier estimates the probability of progressing to dementia across horizons $h \in \{6, 12, 24\}$ for all baseline non-demented anchors (CN and MCI).
 
+\subsection{Sequential Trajectory Staging: Bidirectional LSTM}
+To evaluate longitudinal patient profiles exhibiting multi-visit historical assessments, the system deploys an operational Bidirectional Long Short-Term Memory (BiLSTM) network accessible via \texttt{POST /lstm-predict} and visualized in the interactive web interface under the temporal prediction module (\texttt{/temporal-prediction}). Unlike static point models or the tabular multi-horizon delta regressors which map from a single anchor visit, the BiLSTM architecture models chronological patterns over sliding windows of up to $T = 3$ consecutive clinical consultations.
+
+The input sequence $\mathbf{X} \in \mathbb{R}^{B \times T \times D}$ tracks $D = 5$ standardized features per consultation: patient entry age, CDR global score (\texttt{CDGLOBAL}), Mini-Mental State Examination (\texttt{MMSCORE}), ADAS-Cog-11 total score (\texttt{TOTSCORE}), and elapsed visit month. Sequences with fewer than 3 visits are zero-padded along the temporal dimension ($T=3$) and normalized using an empirical Min-Max scaler fitted on the training split. The architecture consists of:
+\begin{enumerate}
+    \item A Bidirectional LSTM layer with 64 units forward and 64 units backward ($128$ concatenated recurrent channels, recurrent dropout $0.1$, input dropout $0.2$) capturing forward and backward temporal dynamics;
+    \item A Batch Normalization layer stabilizing hidden feature distributions across variable-length trajectories;
+    \item A fully-connected Dense layer with 32 rectified linear units (ReLU) and $L_2$ weight regularization ($\lambda = 10^{-4}$);
+    \item A Dropout regularization layer ($p = 0.3$);
+    \item A 3-unit Softmax output layer computing posterior probabilities for Cognitive Normal (CN), Mild Cognitive Impairment (MCI), and Alzheimer's Disease (AD) at the subsequent clinical follow-up.
+\end{enumerate}
+The model was trained on ADNI longitudinal sequences using the Adam optimizer ($\text{learning rate} = 10^{-3}$, batch size 32) and sparse categorical cross-entropy loss with balanced inverse-frequency class weights to compensate for lower dementia prevalence at early visits. In production, this module allows clinicians to test sequence hypotheses across multiple visits and inspect risk transitions, while operational health is continuously audited by automated integration tests (\texttt{test\_legacy\_routes.py} and \texttt{test\_twin\_api.py}).
+
 \subsection{Deep Learning Experiment: Masked Recurrent GRU}
-To test whether sequential neural models outperform tree ensembles on irregular longitudinal visits, we constructed a two-layer Gated Recurrent Unit (GRU) taking observed values concatenated with binary missingness indicators $m_t \in \{0, 1\}$~\cite{che2018grud}. An established ship rule specified that the recurrent model would replace CatBoost only if it achieved an F1 margin boost $\ge 0.03$ and lower MMSE MAE at 12 months.
+While the Bidirectional LSTM was deployed for discrete multi-visit sequence classification in the interactive clinical dashboard, we separately investigated a two-layer Gated Recurrent Unit (GRU) with missingness indicator masks ($m_t \in \{0, 1\}$)~\cite{che2018grud} to evaluate whether continuous numeric trajectory regression on irregular visits could outperform gradient boosted trees. An established ship rule specified that the recurrent regression model would replace CatBoost only if it achieved an F1 margin boost $\ge 0.03$ and lower MMSE MAE at 12 months.
 
 \subsection{Counterfactual Scenario Lab & Plausibility Envelope}
 The Scenario Lab provides an interactive, dry-run sandbox where clinicians can adjust cognitive test values or decline velocity multipliers ($\alpha \in [0.5, 1.5]$) to simulate prospective disease trajectories without persisting changes to the patient's record.
@@ -160,7 +173,7 @@ Interpretability is achieved through three complementary methods:
 \section{Results and Discussion}
 \label{sec:results}
 
-A total of nine core models and auxiliary modules were evaluated on the held-out test partition (Table~\ref{tab:model_inventory}).
+A total of ten component models and auxiliary modules were evaluated or deployed across the platform (Table~\ref{tab:model_inventory}). In addition to cross-sectional staging and multi-horizon continuous regression, the operational Bidirectional LSTM sequence stager evaluates multi-visit patient trajectories ($T \le 3$ visits) directly in the interactive temporal tool (\texttt{POST /lstm-predict}), producing discrete syndromic classifications that complement continuous numeric progression forecasts.
 
 \input{tables/table3_model_inventory.tex}
 
@@ -356,9 +369,10 @@ Data collection and sharing for this project was funded by the Alzheimer's Disea
 \section*{Supplementary Appendix}
 \addcontentsline{toc}{section}{Supplementary Appendix}
 
-\subsection*{Appendix A: Earlier-Phase Auxiliary Components (Phase 1 Baseline)}
-During early development, four auxiliary models were benchmarked and are retained as unblended reference chips or ingestion utilities:
+\subsection*{Appendix A: Sequential and Earlier-Phase Auxiliary Components}
+In addition to the primary CatBoost stager and regression models, five auxiliary components and sequential networks are integrated or benchmarked across the platform:
 \begin{enumerate}
+    \item \textbf{Bidirectional LSTM Sequence Stager}: A sequential recurrent neural network deployed at \texttt{POST /lstm-predict} and visualized in the temporal prediction interface (\texttt{/temporal-prediction}). Operating on sliding windows of up to 3 visits with 5 core features (\texttt{entry\_age}, \texttt{CDGLOBAL}, \texttt{MMSCORE}, \texttt{TOTSCORE}, \texttt{visit\_month}), it uses bidirectional recurrent layers ($2 \times 64$ units) followed by Batch Normalization, Dense(32, ReLU), and a 3-class Softmax classifier (CN, MCI, AD). Integration health is validated by test suites (\texttt{test\_legacy\_routes.py} and \texttt{test\_twin\_api.py}).
     \item \textbf{Kaggle Lifestyle Screener}: Trained on Rabie El Kharoua's Kaggle dataset (2,149 records, 35 features). It achieves 95.6\% test accuracy (\texttt{06\_bootstrap\_results.txt}) but is displayed strictly as an auxiliary symptom screening chip.
     \item \textbf{Kaggle 2D Slice ResNet34}: FastAI ResNet34 fine-tuned on augmented 2D axial slices, achieving 99.7\% slice accuracy on Kaggle. It is downweighted ($w=0.20$, $T=2.0$) in ADNI late fusion.
     \item \textbf{Biomarker-APOE Ensemble}: Optuna-blended XGBoost, Random Forest, and MLP trained on PCA-transformed ADNI CSF and APOE features. On holdout test data, it achieves 48.1\% accuracy (\texttt{06\_bootstrap\_results.txt}).
@@ -382,3 +396,4 @@ During early development, four auxiliary models were benchmarked and are retaine
 \input{tables/table11_limitations.tex}
 
 \end{document}
+

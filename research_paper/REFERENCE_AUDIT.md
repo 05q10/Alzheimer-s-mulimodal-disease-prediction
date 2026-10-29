@@ -53,3 +53,4 @@ The following 12 foundational references were audited and integrated into `refer
 - All citations retained in `references.bib` and cited in `main.tex` are 100% verified against scientific databases with verified DOIs.
 - All erroneous venue attributions in early student drafts have been corrected.
 - Unverifiable or irrelevant informal names have been pruned.
+

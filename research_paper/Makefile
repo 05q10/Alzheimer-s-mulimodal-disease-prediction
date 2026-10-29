@@ -70,3 +70,4 @@ print('Successfully created research_paper.zip')"
 
 clean:
 	rm -f *.aux *.log *.bbl *.blg *.out *.toc *.synctex.gz
+

@@ -100,3 +100,4 @@ Font sizes must be >= 9 pt.
 17. fig_ui_scenario (.png, .pdf) [Placeholder / User Capture]
     - Title: Interactive Counterfactual Scenario Lab & Plausibility Guard
     - Description: Next.js UI showing what-if decline rate slider, lifestyle adjustment toggles, projected trajectory comparison, and envelope violation alerts. Captured as per SCREENSHOTS.md.
+

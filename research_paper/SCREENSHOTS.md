@@ -84,3 +84,4 @@ python -c "from PIL import Image; [Image.open(f'research_paper/figures/{name}.pn
 ```
 
 Once converted, your paper can be compiled in final mode (`make final`).
+

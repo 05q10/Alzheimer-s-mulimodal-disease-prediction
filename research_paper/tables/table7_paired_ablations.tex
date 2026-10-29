@@ -3,7 +3,8 @@
 \caption{Paired statistical ablations and incremental utility evaluations (evaluated on identical subject subsets with 1,000 cluster-bootstrap iterations).}
 \label{tab:paired_ablations}
 \small
-\begin{tabular}{lp{4.5cm}rrp{4.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{4.0cm}rrp{4.5cm}}
 \toprule
 \textbf{Evaluation Task} & \textbf{Comparison Condition} & \textbf{Metric Delta} & \textbf{95\% Cluster-CI} & \textbf{Statistical Conclusion} \\
 \midrule
@@ -14,4 +15,5 @@ MRI in Progression  & With vs Without FreeSurfer MRI (MMSE@12m)            & $\D
 Vitals Inclusion    & Adding BMI and Blood Pressure to Stager               & $\Delta\text{MAE} = -0.0080$ & [-0.0310, 0.0160] & \textbf{Null result} ($p=0.42$): excluded from staging feature set. \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}

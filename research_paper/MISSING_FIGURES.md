@@ -22,3 +22,4 @@ All quantitative machine learning results figures have been generated directly f
    python -c "from PIL import Image; [Image.open(f'research_paper/figures/{name}.png').convert('RGB').save(f'research_paper/figures/{name}.pdf') for name in ['fig_ui_dashboard', 'fig_ui_why', 'fig_ui_scenario']]"
    ```
 5. Rebuild the paper in final mode (`make final`).
+

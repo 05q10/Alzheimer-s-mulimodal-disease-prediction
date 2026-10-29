@@ -49,3 +49,4 @@
 | 19a | Provide information on accessibility of models, code, and supplementary materials. | Declarations & Appendix | **Done**: GitHub link, Overleaf package, data access via ADNI DUA. |
 | 19b | State funding sources and role of funders. | Declarations | **Done**: Stated in Declarations. |
 | 19c | Disclose competing interests. | Declarations | **Done**: None declared. |
+

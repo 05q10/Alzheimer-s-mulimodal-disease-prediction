@@ -259,6 +259,7 @@ def write_table1():
 \caption{Cohort summary and subject-level stratified data partition across the Alzheimer's Disease Neuroimaging Initiative (ADNI) unified longitudinal cohort ($N=3,034$ subjects, 22,168 clinical visits).}
 \label{tab:cohort_splits}
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lrrrrr}
 \toprule
 \textbf{Split Partition} & \textbf{Subjects} & \textbf{Split Share} & \textbf{Visits} & \textbf{Converters} & \textbf{Converter Share} \\
@@ -270,18 +271,20 @@ Held-Out Test Set        & 456               & 15.0\%               & 3,194     
 \textbf{Total Cohort}    & \textbf{3,034}    & \textbf{100.0\%}     & \textbf{22,168} & \textbf{532}        & \textbf{17.5\%} \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table1_cohort_splits.tex").write_text(content, encoding="utf-8")
 
 
 def write_table2():
-    content = r"""\begin{table*}[t]
+    content = r"""\begin{table}[t]
 \centering
 \caption{Data inventory, file sizes, longitudinal coverage, and merge decisions across the multimodal repository.}
 \label{tab:data_sources}
 \small
-\begin{tabular}{llrrlp{6.8cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{2.6cm}rrlp{5.0cm}}
 \toprule
 \textbf{Dataset File} & \textbf{Modality / Family} & \textbf{Size} & \textbf{Visits} & \textbf{Coverage} & \textbf{Merge Decision \& Role} \\
 \midrule
@@ -296,33 +299,37 @@ def write_table2():
 Kaggle 2D MRI Slice Dataset & Axial Neuroimaging Slices & 44,000 imgs & N/A & External & Trains 2D ResNet34; fused at weight $w=0.20$ with temperature $T=2.0$. \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{adjustbox}
+\end{table}
 """
     (TABLES_DIR / "table2_data_sources.tex").write_text(content, encoding="utf-8")
 
 
 def write_table3():
-    content = r"""\begin{table*}[t]
+    content = r"""\begin{table}[t]
 \centering
 \caption{Model inventory: operational deployment status, architecture, input modalities, training cohort, and verified primary metric.}
 \label{tab:model_inventory}
 \small
-\begin{tabular}{lp{3.5cm}lp{3.8cm}p{3.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{2.3cm}p{3.0cm}p{2.6cm}p{2.0cm}p{2.2cm}p{3.0cm}}
 \toprule
-\textbf{Component Model} & \textbf{Architecture} & \textbf{Status} & \textbf{Training Cohort} & \textbf{Primary Metric (Source File)} \\
+\textbf{Component Model} & \textbf{Architecture} & \textbf{Input Modalities} & \textbf{Status} & \textbf{Training Cohort} & \textbf{Primary Metric (Source File)} \\
 \midrule
-TwinStager (Model A) & Calibrated Multi-Tier CatBoostClassifier ($T=0.86$) & Production (Shipped) & ADNI (2,123 train subjects, stratified split) & Full Test Macro-F1 = 0.796 [0.769, 0.824] (\texttt{exp09\_stager\_results.md}) \\
-TwinProgression (Model B) & Delta-Change CatBoostRegressors + Clustered CIs & Production (Shipped) & ADNI (2,123 train subjects, multi-horizon) & MMSE 12m MAE = 1.465 [1.354, 1.581] (\texttt{exp10\_progression\_results.md}) \\
-Conversion Hazard GBM & Binary CatBoost Classifier (6m, 12m, 24m) & Production (Shipped) & ADNI non-demented anchors & 24m AUROC = 0.8111 [0.756, 0.861], BSS = +0.2088 (\texttt{exp10\_progression\_results.md}) \\
-Masked Recurrent GRU & 2-Layer GRU with Missingness Mask Indicators & Experiment (Not Shipped) & ADNI 4-visit sequential cohort & 12m MMSE MAE = 1.475 (beaten by GBM 1.465) (\texttt{exp10\_progression\_results.md}) \\
-Lifestyle Screener & CatBoostClassifier (33 clinical/lifestyle features) & Production (Aux Chip) & Kaggle Lifestyle Cohort ($N=2,149$ records) & Test Accuracy = 0.956 [0.935, 0.972] (\texttt{06\_bootstrap\_results.txt}) \\
-2D MRI Slice Classifier & FastAI ResNet34 with Softmax Head ($T=2.0$) & Production (Late Fusion) & Kaggle Augmented MRI Slices (~44,000 slices) & Kaggle Slice Acc = 99.7\%* (downweighted $w=0.20$) (\texttt{final\_metrics.json}) \\
-Biomarker Ensemble & XGBoost + RF + MLP Optuna Blend & Production (Aux Chip) & ADNI Holdout Set (~3,000 rows) & Holdout Accuracy = 0.481 [0.435, 0.526] (\texttt{06\_bootstrap\_results.txt}) \\
-Vision-Language OCR & Vision-LLaMA Maverick with Tesseract fallback & Production (Ingestion) & Synthetic Clinical Reports ($N=12$ test fields) & Exact Match = 83.3\%, Fuzzy = 8.3\% (\texttt{07\_ocr\_confusion.json}) \\
-Lifestyle Modifier Prior & Lancet Commission Relative Risk Table & Production (Prior) & Literature Prior (Livingston et al. 2024) & Hard Bounded in [0.85, 1.35] (\texttt{risk\_modifier\_config.json}) \\
+TwinStager (Model A) & Calibrated Multi-Tier CatBoostClassifier ($T=0.86$) & Dynamic Tiers T1--T4 (Demographics, APOE4, Cognition, CSF, MRI) & Production (Shipped) & ADNI (2,123 train subjects, stratified split) & Full Test Macro-F1 = 0.796 [0.769, 0.824] (\texttt{exp09\_stager\_results.md}) \\
+TwinProgression (Model B) & Delta-Change CatBoostRegressors + Clustered CIs & Baseline Cognition, APOE4, FreeSurfer MRI, visit interval & Production (Shipped) & ADNI (2,123 train subjects, multi-horizon) & MMSE 12m MAE = 1.465 [1.354, 1.581] (\texttt{exp10\_progression\_results.md}) \\
+Conversion Hazard GBM & Binary CatBoost Classifier (6m, 12m, 24m) & Baseline cognitive scores, clinical stage, demographics, APOE4 & Production (Shipped) & ADNI non-demented baseline anchors & 24m AUROC = 0.8111 [0.756, 0.861], BSS = +0.2088 (\texttt{exp10\_progression\_results.md}) \\
+BiLSTM Sequence Stager & Bidirectional LSTM ($2 \times 64$ units) $\rightarrow$ Dense(32) $\rightarrow$ Softmax & Multi-visit sequences ($T \le 3$): Age, CDR, MMSE, ADAS11, visit month & Production (Interactive Tool; \texttt{POST /lstm-predict}) & ADNI longitudinal sequences ($N \approx 2{,}123$ subjects) & 3-Class Diagnosis (CN/MCI/AD); validated in \texttt{test\_legacy\_routes.py} \\
+Masked Recurrent GRU & 2-Layer GRU with Missingness Mask Indicators & Multi-visit cognitive scores + binary missingness indicators & Experiment (Not Shipped) & ADNI 4-visit sequential cohort & 12m MMSE MAE = 1.475 (beaten by GBM 1.465) (\texttt{exp10\_progression\_results.md}) \\
+Lifestyle Screener & CatBoostClassifier (33 clinical/lifestyle features) & Clinical symptoms, medical history, lifestyle questionnaire & Production (Aux Chip) & Kaggle Lifestyle Cohort ($N=2,149$ records) & Test Accuracy = 0.956 [0.935, 0.972] (\texttt{06\_bootstrap\_results.txt}) \\
+2D MRI Slice Classifier & FastAI ResNet34 with Softmax Head ($T=2.0$) & Single 2D Axial T1 MRI slice (JPEG/PNG) & Production (Late Fusion) & Kaggle Augmented MRI Slices (~44,000 slices) & Kaggle Slice Acc = 99.7\%* (downweighted $w=0.20$) (\texttt{final\_metrics.json}) \\
+Biomarker Ensemble & XGBoost + RF + MLP Optuna Blend & CSF lab biomarkers ($\text{A}\beta$, Tau, p-Tau) + APOE4 & Production (Aux Chip) & ADNI Holdout Set (~3,000 rows) & Holdout Accuracy = 0.481 [0.435, 0.526] (\texttt{06\_bootstrap\_results.txt}) \\
+Vision-Language OCR & Vision-LLaMA Maverick with Tesseract fallback & Scanned lab reports / clinical assessment PDFs & Production (Ingestion) & Synthetic Clinical Reports ($N=12$ test fields) & Exact Match = 83.3\%, Fuzzy = 8.3\% (\texttt{07\_ocr\_confusion.json}) \\
+Lifestyle Modifier Prior & Lancet Commission Relative Risk Table & 10 modifiable cardiometabolic \& behavioral factors & Production (Prior) & Literature Prior (Livingston et al. 2024) & Hard Bounded in [0.85, 1.35] (\texttt{risk\_modifier\_config.json}) \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{adjustbox}
+\end{table}
 """
     (TABLES_DIR / "table3_model_inventory.tex").write_text(content, encoding="utf-8")
 
@@ -333,7 +340,8 @@ def write_table4():
 \caption{Cross-sectional TwinStager (Model A) performance across diagnostic feature tiers on the held-out test partition ($N=3,022$ visits across 456 subjects).}
 \label{tab:stager_results}
 \small
-\begin{tabular}{lp{5.2cm}rrrr}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{4.8cm}rrrr}
 \toprule
 \textbf{Tier} & \textbf{Included Feature Set} & \textbf{Accuracy} & \textbf{Macro-F1} & \textbf{Macro-F1 95\% CI} & \textbf{ECE} \\
 \midrule
@@ -345,6 +353,7 @@ def write_table4():
 \textbf{T4}  & T3 + ComBat FreeSurfer Morphometry           & \textbf{0.811} & \textbf{0.796} & \textbf{[0.769, 0.824]} & \textbf{0.0192} \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table4_stager_results.tex").write_text(content, encoding="utf-8")
@@ -356,6 +365,7 @@ def write_table5():
 \caption{Longitudinal Progression Model B forecasting error (Mean Absolute Error, MAE) compared against naive persistence and linear slope extrapolation baselines on identical test anchors.}
 \label{tab:forecast_mae}
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llrrlrrr}
 \toprule
 \textbf{Target} & \textbf{Horizon} & \textbf{N Anchors} & \textbf{GBM Val} & \textbf{GBM Test MAE [95\% CI]} & \textbf{Persistence} & \textbf{Slope Extrap} & \textbf{Beats Persist?} \\
@@ -373,6 +383,7 @@ def write_table5():
                 & 24 months & 664  & 3.446 & \textbf{3.120} [2.824, 3.441] & 3.665 & 6.253 & \textbf{YES} \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table5_forecast_mae.tex").write_text(content, encoding="utf-8")
@@ -384,6 +395,7 @@ def write_table6():
 \caption{Dementia conversion risk discrimination and probabilistic calibration on non-demented baseline anchors across progression horizons.}
 \label{tab:conversion_metrics}
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lrrrrrr}
 \toprule
 \textbf{Horizon} & \textbf{N Anchors (Events)} & \textbf{GBM AUROC [95\% CI]} & \textbf{Stage+MMSE Base} & \textbf{Brier Score} & \textbf{Brier Skill (BSS)} & \textbf{ECE} \\
@@ -393,6 +405,7 @@ def write_table6():
 24 months & 937 (143)   & \textbf{0.8111} [0.756, 0.861] & 0.7291 & 0.1023 & +0.2088 & 0.0221 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table6_conversion_metrics.tex").write_text(content, encoding="utf-8")
@@ -404,7 +417,8 @@ def write_table7():
 \caption{Paired statistical ablations and incremental utility evaluations (evaluated on identical subject subsets with 1,000 cluster-bootstrap iterations).}
 \label{tab:paired_ablations}
 \small
-\begin{tabular}{lp{4.5cm}rrp{4.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{4.0cm}rrp{4.5cm}}
 \toprule
 \textbf{Evaluation Task} & \textbf{Comparison Condition} & \textbf{Metric Delta} & \textbf{95\% Cluster-CI} & \textbf{Statistical Conclusion} \\
 \midrule
@@ -415,6 +429,7 @@ MRI in Progression  & With vs Without FreeSurfer MRI (MMSE@12m)            & $\D
 Vitals Inclusion    & Adding BMI and Blood Pressure to Stager               & $\Delta\text{MAE} = -0.0080$ & [-0.0310, 0.0160] & \textbf{Null result} ($p=0.42$): excluded from staging feature set. \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table7_paired_ablations.tex").write_text(content, encoding="utf-8")
@@ -426,7 +441,8 @@ def write_table8():
 \caption{Clinical archetype benchmark: validation against empirical 5th--95th percentile training envelope and automated scope guards.}
 \label{tab:archetype_plausibility}
 \small
-\begin{tabular}{lp{3.5cm}rrrrp{3.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{3.2cm}rrrrp{3.5cm}}
 \toprule
 \textbf{Archetype} & \textbf{Baseline Scores} & \textbf{P(CN)} & \textbf{P(MCI)} & \textbf{P(AD)} & \textbf{12m MMSE [Bounds]} & \textbf{Reliability \& Scope Alerts} \\
 \midrule
@@ -436,6 +452,7 @@ Mild AD                 & Age 72, MMSE 20, CDR 1.0, ADAS 25, FAQ 15& 0.011 & 0.0
 Moderate AD             & Age 72, MMSE 16, CDR 1.0, ADAS 35, FAQ 18& 0.029 & 0.133 & \textbf{0.838} & 12.3 [$\le \text{curr}+1$] & \texttt{low}; alerts: MMSE 16 outside [20, 30]; ADAS 35 outside [2.3, 26.3]. \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table8_archetype_plausibility.tex").write_text(content, encoding="utf-8")
@@ -447,7 +464,8 @@ def write_table9():
 \caption{Systematic lineage and consumption mapping across all 43 intake variables collected by the Digital Twin interface.}
 \label{tab:lineage_summary}
 \small
-\begin{tabular}{lp{4.2cm}rp{5.2cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lp{3.8cm}rp{5.2cm}}
 \toprule
 \textbf{Usage Category} & \textbf{Clinical Fields} & \textbf{Count} & \textbf{Assigned Functional Role} \\
 \midrule
@@ -459,18 +477,20 @@ def write_table9():
 \texttt{recorded\_only} & Ethnicity, BMI, Systolic BP, Diastolic BP & 4 & Stored for clinical auditing; excluded from ML stage/forecast. \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \end{table}
 """
     (TABLES_DIR / "table9_lineage_summary.tex").write_text(content, encoding="utf-8")
 
 
 def write_table10():
-    content = r"""\begin{table*}[t]
+    content = r"""\begin{table}[t]
 \centering
 \caption{Literature-grounded lifestyle and cardiometabolic risk modifier factors (Lancet Commission 2024 update; Livingston et al.). \textit{Labeled as an external literature prior, not learned from ADNI.}}
 \label{tab:lifestyle_factors}
 \small
-\begin{tabular}{llrrp{7.5cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrp{6.5cm}}
 \toprule
 \textbf{Risk Factor} & \textbf{Adverse Definition} & \textbf{Pooled RR [95\% CI]} & \textbf{Cap [Lo, Hi]} & \textbf{Literature Citation \& Clinical Context} \\
 \midrule
@@ -486,18 +506,20 @@ Traumatic Brain Injury& History of head trauma with LOC     & 1.78 [1.29, 2.46] 
 Cardiovascular Disease& Clinical CVD history                & 1.28 [1.05, 1.56] & [0.85, 1.35] & Newman et al. (2005); Lancet Commission 2024 update. \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{adjustbox}
+\end{table}
 """
     (TABLES_DIR / "table10_lifestyle_factors.tex").write_text(content, encoding="utf-8")
 
 
 def write_table11():
-    content = r"""\begin{table*}[t]
+    content = r"""\begin{table}[t]
 \centering
 \caption{Structured audit of methodological limitations, clinical risks, and implemented system safeguards.}
 \label{tab:limitations}
 \small
-\begin{tabular}{lp{6.5cm}p{7.5cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{3.0cm}p{5.5cm}p{6.5cm}}
 \toprule
 \textbf{Domain} & \textbf{Identified Limitation or Clinical Risk} & \textbf{Engineered Safeguard / Transparent Remediation} \\
 \midrule
@@ -509,7 +531,8 @@ Short-Horizon CDGLOBAL  & Model B does not beat naive persistence at 6m and 12m 
 Regulatory Boundary     & Academic prototype; not cleared by FDA, CE, or CDSS regulatory bodies. & Mandatory clinical disclaimer on all API contracts, exports, and UI headers; no autonomous clinical treatment actions permitted. \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{adjustbox}
+\end{table}
 """
     (TABLES_DIR / "table11_limitations.tex").write_text(content, encoding="utf-8")
 
@@ -536,3 +559,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

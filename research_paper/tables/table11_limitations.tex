@@ -1,9 +1,10 @@
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Structured audit of methodological limitations, clinical risks, and implemented system safeguards.}
 \label{tab:limitations}
 \small
-\begin{tabular}{lp{6.5cm}p{7.5cm}}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{3.0cm}p{5.5cm}p{6.5cm}}
 \toprule
 \textbf{Domain} & \textbf{Identified Limitation or Clinical Risk} & \textbf{Engineered Safeguard / Transparent Remediation} \\
 \midrule
@@ -15,4 +16,5 @@ Short-Horizon CDGLOBAL  & Model B does not beat naive persistence at 6m and 12m 
 Regulatory Boundary     & Academic prototype; not cleared by FDA, CE, or CDSS regulatory bodies. & Mandatory clinical disclaimer on all API contracts, exports, and UI headers; no autonomous clinical treatment actions permitted. \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{adjustbox}
+\end{table}
