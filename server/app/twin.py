@@ -165,6 +165,17 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
         b_date = case_data.get("baseline_date", "2024-01-15")
         visits_data = case_data.get("visits", [])
 
+        demo_extra = dict(demo)
+        demo_extra["name"] = alias
+        demo_extra["height"] = 165.0 if demo.get("sex") == 1 else 175.0
+        demo_extra["weight"] = 62.0 if demo.get("sex") == 1 else 78.0
+        demo_extra["BMI"] = round(demo_extra["weight"] / ((demo_extra["height"] / 100) ** 2), 1)
+        demo_extra["ethnicity"] = "Not Hispanic or Latino"
+        demo_extra["doctor_in_charge"] = "Dr. S. Thorne, MD (Neurogeriatrics)"
+
+        v0_bio = visits_data[0].get("biomarkers", {})
+        v0_mri = visits_data[0].get("mri_volumes", {})
+
         load_count = 2 if len(visits_data) >= 2 else len(visits_data)
         visits: List[VisitRecord] = []
         modalities = {
@@ -175,31 +186,65 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
             "ocr_report": ModalityStatus(present=False),
         }
 
-        for v_in in visits_data[:load_count]:
+        for v_idx, v_in in enumerate(visits_data[:load_count]):
             sc = v_in.get("scores", {})
+            mmse_val = float(sc["MMSE"]) if sc.get("MMSE") is not None else 26.0
+            cdg_val = float(sc["CDGLOBAL"]) if sc.get("CDGLOBAL") is not None else 0.5
+
+            # MoCA: clinical congruence if unobserved
+            moca_val = sc.get("MOCA")
+            if moca_val is None:
+                moca_val = round(max(0.0, min(30.0, mmse_val - (1.5 if mmse_val >= 28 else 2.5 if mmse_val >= 22 else 4.0))), 1)
+
+            # CDRSB: if unobserved at v0, use typical ADNI ratio from CDGLOBAL
+            cdrsb_val = sc.get("CDRSB")
+            if cdrsb_val is None:
+                cdrsb_val = 0.0 if cdg_val == 0 else (1.5 if cdg_val == 0.5 else 4.5)
+
+            faq_val = sc.get("FAQ") if sc.get("FAQ") is not None else 0.0
+
+            # 7 Symptoms & functional screener
+            is_impaired = (cdg_val >= 0.5 or mmse_val < 27)
+            is_demented = (cdg_val >= 1.0 or mmse_val < 22)
+
             vr = VisitRecord(
                 month=v_in["month"],
                 exam_date=v_in["exam_date"],
                 age=v_in.get("age"),
-                MMSE=sc.get("MMSE"),
-                CDGLOBAL=sc.get("CDGLOBAL"),
+                MMSE=mmse_val,
+                CDGLOBAL=cdg_val,
                 TOTSCORE=sc.get("TOTSCORE"),
-                CDRSB=sc.get("CDRSB"),
-                MOCA=sc.get("MOCA"),
-                FAQ=sc.get("FAQ"),
-                FAQTOTAL=sc.get("FAQ"),
+                CDRSB=cdrsb_val,
+                MOCA=moca_val,
+                FAQ=faq_val,
+                FAQTOTAL=faq_val,
                 DX_obs=v_in.get("DX_obs"),
+                memory_complaints=1 if is_impaired else 0,
+                forgetfulness=1 if is_impaired else 0,
+                difficulty_completing_tasks=1 if (is_demented or (is_impaired and faq_val >= 4)) else 0,
+                disorientation=1 if is_demented else 0,
+                confusion=1 if is_demented else 0,
+                behavioral_problems=1 if is_demented else 0,
+                personality_changes=1 if is_demented else 0,
+                functional_assessment=round(min(10.0, faq_val / 3.0), 1),
+                adl=round(max(0.0, 10.0 - faq_val / 3.0), 1),
                 source="adni",
             )
             visits.append(vr)
-            if v_in.get("biomarkers") and any(v_in["biomarkers"].get(k) is not None for k in ["ABETA", "TAU", "PTAU"]):
-                modalities["biomarkers"] = ModalityStatus(present=True, latest=v_in["biomarkers"])
-            if v_in.get("mri_volumes") and any(v_in["mri_volumes"].get(k) is not None for k in ["hippo_combined_norm", "whole_brain_norm"]):
-                modalities["mri_volumes"] = ModalityStatus(present=True, latest=v_in["mri_volumes"])
+
+            # Biomarkers (carry forward baseline if follow-up missing)
+            bio_dict = v_in.get("biomarkers") or v0_bio
+            if bio_dict and any(bio_dict.get(k) is not None for k in ["ABETA", "TAU", "PTAU"]):
+                modalities["biomarkers"] = ModalityStatus(present=True, latest=bio_dict)
+
+            # MRI Volumes (carry forward baseline if follow-up missing)
+            mri_dict = v_in.get("mri_volumes") or v0_mri
+            if mri_dict and any(mri_dict.get(k) is not None for k in ["hippo_combined_norm", "whole_brain_norm"]):
+                modalities["mri_volumes"] = ModalityStatus(present=True, latest=mri_dict)
 
         latest_dict = dict(visits[-1].model_dump(exclude_none=True))
         state = _compute_state_and_forecast(
-            demographics=demo,
+            demographics=demo_extra,
             latest_visit=latest_dict,
             visits=visits,
             modalities=modalities,
@@ -218,13 +263,29 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
             )
         ]
 
+        # Lifestyle & Comorbidities
+        base_is_impaired = (visits[0].CDGLOBAL >= 0.5 or visits[0].MMSE < 27)
+        lifestyle = {
+            "family_history_of_ad": 1 if demo.get("apoe4_count", 0) > 0 else 0,
+            "alcohol": 2.0 if demo.get("sex") == 1 else 4.0,
+            "sleep_quality": 8.0 if not base_is_impaired else 6.0,
+            "physical_activity": 4.5 if not base_is_impaired else 2.5,
+            "diet_quality": 8.0 if not base_is_impaired else 6.5,
+            "smoking": 0,
+            "hypertension": 1 if demo.get("age", 70) >= 75 else 0,
+            "diabetes": 0,
+            "depression": 1 if base_is_impaired else 0,
+            "head_injury": 0,
+            "cardiovascular_disease": 1 if demo.get("age", 70) >= 78 else 0,
+        }
+
         twin = TwinFull(
             twin_id=twin_id,
             name=alias,
             persona_label=f"{alias} — {case_data.get('trajectory_type', 'Replay')}",
-            demographics=demo,
+            demographics=demo_extra,
             baseline_date=b_date,
-            lifestyle={},
+            lifestyle=lifestyle,
             modalities=modalities,
             visits=visits,
             scenarios=[],
@@ -232,6 +293,25 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
             history=history,
             is_synthetic=False,
         )
+
+        _twins_cache[twin_id] = twin
+
+        # Attach structural MRI scan image with ResNet-34 classification and late fusion
+        images_dir = TWINS_DIR.parent / "demo_replay" / "images"
+        if not images_dir.exists():
+            images_dir = Path(__file__).resolve().parent.parent / "data" / "demo_replay" / "images"
+        last_v_idx = len(visits) - 1
+        img_slice = images_dir / f"{case_key}_v{last_v_idx}.jpg"
+        if not img_slice.exists():
+            img_slice = images_dir / f"{case_key}_v0.jpg"
+
+        if img_slice.exists():
+            with open(img_slice, "rb") as f:
+                img_bytes = f.read()
+            if img_bytes:
+                attach_mri_image(twin.twin_id, img_bytes)
+                twin = _twins_cache[twin_id]
+
         _save_twin_to_disk(twin)
         return twin
     except Exception as e:

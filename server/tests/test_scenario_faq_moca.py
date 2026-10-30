@@ -94,3 +94,4 @@ def test_demo_twin_auto_resolution_and_mri():
     res0 = get_visit_mri_route("twin-case-1", 0)
     assert res0.status_code == 200 or hasattr(res0, "path")
     assert "case_c_mci_to_ad_v0.jpg" in str(res0.path)
+
