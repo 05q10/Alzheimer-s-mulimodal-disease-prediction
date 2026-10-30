@@ -229,13 +229,35 @@ export default function DemosPage() {
           forecast: builtForecast,
           conversion_risk: latestVisit.conversion_risk,
         },
-        history: builtVisits.map((v) => ({
-          timestamp: new Date().toISOString(),
-          recorded_at: v.exam_date,
-          exam_date: v.exam_date,
-          stage_probs: v.stage_probs,
-          event: `Visit M${v.month} evaluation recorded`,
-        })),
+        history: builtVisits.map((v, i) => {
+          const prevV = i > 0 ? builtVisits[i - 1] : undefined;
+          const diff = prevV ? {
+            CN: Number((v.stage_probs.CN - prevV.stage_probs.CN).toFixed(4)),
+            MCI: Number((v.stage_probs.MCI - prevV.stage_probs.MCI).toFixed(4)),
+            AD: Number((v.stage_probs.AD - prevV.stage_probs.AD).toFixed(4)),
+          } : null;
+
+          return {
+            timestamp: new Date().toISOString(),
+            recorded_at: v.exam_date,
+            exam_date: v.exam_date,
+            month: v.month,
+            stage_probs: v.stage_probs,
+            event: i === 0 ? "twin_created" : `visit_added_m${v.month}`,
+            prob_diff: diff,
+            inputs: {
+              month: v.month,
+              exam_date: v.exam_date,
+              MMSE: v.MMSE,
+              CDGLOBAL: v.CDGLOBAL,
+              TOTSCORE: v.TOTSCORE,
+              FAQ: v.FAQ,
+              MOCA: v.MOCA,
+              biomarkers: v.biomarkers,
+              mri_volumes: v.mri_volumes,
+            },
+          };
+        }),
         visits: builtVisits,
         timeline: builtVisits.map((v, i) => ({
           visit_number: i + 1,

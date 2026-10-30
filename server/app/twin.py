@@ -282,15 +282,42 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
                 state.forecast[h] = pt
 
         now = datetime.utcnow().isoformat()
-        history = [
-            HistoryEvent(
-                recorded_at=now,
-                timestamp=now,
-                stage_probs=state.stage_probs,
-                event="twin_created",
-                prob_diff=None
+        history: List[HistoryEvent] = []
+        prev_p = None
+        for v_idx, v in enumerate(visits):
+            v_inputs = dict(v.model_dump(exclude_none=True))
+            v_stage_res = get_stager().predict_one(v_inputs)
+            v_probs = StageProbs(**v_stage_res["probs"])
+
+            diff = None
+            if prev_p is not None:
+                diff = {
+                    "CN": round(v_probs.CN - prev_p.CN, 4),
+                    "MCI": round(v_probs.MCI - prev_p.MCI, 4),
+                    "AD": round(v_probs.AD - prev_p.AD, 4),
+                }
+            prev_p = v_probs
+
+            history.append(
+                HistoryEvent(
+                    recorded_at=now,
+                    timestamp=now,
+                    exam_date=v.exam_date,
+                    month=v.month,
+                    stage_probs=v_probs,
+                    event="twin_created" if v_idx == 0 else f"visit_added_m{v.month}",
+                    prob_diff=diff,
+                    inputs={
+                        "month": v.month,
+                        "exam_date": v.exam_date,
+                        "MMSE": v.MMSE,
+                        "CDGLOBAL": v.CDGLOBAL,
+                        "TOTSCORE": v.TOTSCORE,
+                        "FAQ": v.FAQ,
+                        "MOCA": v.MOCA,
+                    }
+                )
             )
-        ]
 
         # Lifestyle & Comorbidities
         base_is_impaired = (visits[0].CDGLOBAL >= 0.5 or visits[0].MMSE < 27)
@@ -819,9 +846,20 @@ def create_twin(req: CreateTwinRequest) -> TwinFull:
             HistoryEvent(
                 recorded_at=now,
                 timestamp=now,
+                exam_date=baseline_date,
+                month=0,
                 stage_probs=state.stage_probs,
                 event="twin_created",
-                prob_diff=None
+                prob_diff=None,
+                inputs={
+                    "month": 0,
+                    "exam_date": baseline_date,
+                    "MMSE": req.MMSE,
+                    "CDGLOBAL": req.CDGLOBAL,
+                    "TOTSCORE": req.TOTSCORE,
+                    "FAQ": req.FAQ,
+                    "MOCA": req.MOCA,
+                }
             )
         ]
     )
@@ -914,9 +952,18 @@ def add_visit(twin_id: str, req: AddVisitRequest) -> Tuple[TwinFull, Dict[str, f
         HistoryEvent(
             recorded_at=now_iso,
             timestamp=now_iso,
+            exam_date=exam_date_str,
+            month=month,
             stage_probs=new_state.stage_probs,
             event=f"visit_added_m{month}",
-            prob_diff=prob_diff
+            prob_diff=prob_diff,
+            inputs={
+                "month": month,
+                "exam_date": exam_date_str,
+                "MMSE": req.MMSE,
+                "CDGLOBAL": req.CDGLOBAL,
+                "TOTSCORE": req.TOTSCORE,
+            }
         )
     )
 

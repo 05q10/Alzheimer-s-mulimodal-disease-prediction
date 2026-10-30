@@ -87,11 +87,17 @@ class TwinState(BaseModel):
 
 
 class HistoryEvent(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     recorded_at: str
     timestamp: Optional[str] = None
+    exam_date: Optional[str] = None
+    month: Optional[int] = None
     stage_probs: StageProbs
     event: str   # e.g. "visit_added", "modality_attached", "twin_created", "reset"
     prob_diff: Optional[Dict[str, float]] = None
+    inputs: Optional[Dict[str, Any]] = None
+    drivers: Optional[List[Dict[str, Any]]] = None
 
 
 class TwinFull(BaseModel):

@@ -88,9 +88,13 @@ export interface HistoryEvent {
   timestamp: string;
   recorded_at?: string;
   exam_date?: string;
+  month?: number;
   stage_probs: StageProbs;
   event: string;
   prob_diff?: StageProbs | Record<string, number> | null;
+  inputs?: Record<string, any>;
+  drivers?: Array<{ title: string; detail: string; impact?: "high" | "moderate" | "protective" }>;
+  [key: string]: any;
 }
 
 export interface TwinFull {
