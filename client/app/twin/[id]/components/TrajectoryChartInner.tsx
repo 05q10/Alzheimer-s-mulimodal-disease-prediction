@@ -132,10 +132,20 @@ export default function TrajectoryChartInner({
 
     // Collect all unique months
     const monthSet = new Set<number>();
-    visits.forEach((v) => monthSet.add(v.month));
-    Object.keys(activeForecast).forEach((k) => monthSet.add(Number(k)));
+    visits.forEach((v) => {
+      if (typeof v.month === "number" && !isNaN(v.month)) {
+        monthSet.add(v.month);
+      }
+    });
+    Object.keys(activeForecast).forEach((k) => {
+      const parsed = parseInt(k, 10);
+      if (!isNaN(parsed)) monthSet.add(parsed);
+    });
     if (baselineForecast) {
-      Object.keys(baselineForecast).forEach((k) => monthSet.add(Number(k)));
+      Object.keys(baselineForecast).forEach((k) => {
+        const parsed = parseInt(k, 10);
+        if (!isNaN(parsed)) monthSet.add(parsed);
+      });
     }
 
     const sortedMonths = Array.from(monthSet).sort((a, b) => a - b);
@@ -144,7 +154,7 @@ export default function TrajectoryChartInner({
 
     const rows: ChartRow[] = sortedMonths.map((m) => {
       const visit = visits.find((v) => v.month === m);
-      const fc = activeForecast[String(m)];
+      const fc = activeForecast[String(m)] || activeForecast[`${m}m`];
 
       const isObserved = m <= maxObsMonth;
       const obsVal = visit ? (visit[metric] as number | null) : null;
@@ -181,7 +191,7 @@ export default function TrajectoryChartInner({
       let blLo: number | null = null;
       let blHi: number | null = null;
       if (baselineForecast) {
-        const blFc = baselineForecast[String(m)];
+        const blFc = baselineForecast[String(m)] || baselineForecast[`${m}m`];
         if (blFc) {
           blMean = (blFc[metricConfig.key_mean] as number | null) ?? null;
           blLo = (blFc[metricConfig.key_lo] as number | null) ?? null;

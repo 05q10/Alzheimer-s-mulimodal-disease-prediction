@@ -90,9 +90,9 @@ def compute_lifestyle_modifier(lifestyle: Optional[Dict[str, Any]]) -> Dict[str,
         elif factor_name == "depression":
             aliases += ["depressive_symptoms"]
         elif factor_name == "head_injury":
-            aliases += ["tbi", "concussion"]
+            aliases += ["tbi", "concussion", "headinjury", "head_trauma"]
         elif factor_name == "cardiovascular_disease":
-            aliases += ["cvd", "heart_disease", "cardiovascular"]
+            aliases += ["cvd", "heart_disease", "cardiovascular", "cardiovasculardisease"]
 
         for alias in aliases:
             if alias in norm_inputs:

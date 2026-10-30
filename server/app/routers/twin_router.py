@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import FileResponse, Response
 
 from app.models.twin_models import (
     CreateTwinRequest, TwinFull, TwinState, StageProbs,
@@ -116,6 +117,45 @@ async def upload_mri_image_route(twin_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty file uploaded.")
     mri_res, twin = svc_attach_mri_image(twin_id, file_bytes)
     return MRIUploadResponse(mri=mri_res, state=twin.state)
+
+
+@router.get("/twin/{twin_id}/visit/{visit_index}/mri", summary="Serve MRI slice for a twin visit")
+def get_visit_mri_route(twin_id: str, visit_index: int):
+    """
+    Returns the structural MRI slice image associated with the twin's visit.
+    Supports uploaded files, demo replay paired slices, or sensible image fallback.
+    """
+    # 1. Check for specific uploaded visit MRI in data/twins/
+    twins_dir = Path(__file__).resolve().parent.parent.parent / "data" / "twins"
+    direct_candidates = [
+        twins_dir / f"{twin_id}_mri_v{visit_index}.jpg",
+        twins_dir / f"{twin_id}_mri.jpg",
+    ]
+    for p in direct_candidates:
+        if p.exists():
+            return FileResponse(str(p), media_type="image/jpeg")
+
+    # 2. Check demo replay images
+    from app.twin import DEMO_ALIAS_MAP
+    case_key = DEMO_ALIAS_MAP.get(twin_id)
+    if not case_key and (twin_id.startswith("case_") or "case" in twin_id):
+        case_key = twin_id
+
+    replay_images_dir = Path(__file__).resolve().parent.parent.parent / "data" / "demo_replay" / "images"
+    if case_key:
+        replay_slice = replay_images_dir / f"{case_key}_v{visit_index}.jpg"
+        if replay_slice.exists():
+            return FileResponse(str(replay_slice), media_type="image/jpeg")
+        v0_slice = replay_images_dir / f"{case_key}_v0.jpg"
+        if v0_slice.exists():
+            return FileResponse(str(v0_slice), media_type="image/jpeg")
+
+    # 3. Fallback to any sample replay image
+    sample_images = list(replay_images_dir.glob("*.jpg"))
+    if sample_images:
+        return FileResponse(str(sample_images[0]), media_type="image/jpeg")
+
+    raise HTTPException(status_code=404, detail="No MRI slice image available for this visit.")
 
 
 @router.post("/twin/{twin_id}/modality/{modality_name}", response_model=TwinFull,

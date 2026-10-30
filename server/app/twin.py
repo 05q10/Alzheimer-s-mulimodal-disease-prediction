@@ -124,11 +124,130 @@ def _load_twin_from_disk(twin_id: str) -> Optional[TwinFull]:
         return None
 
 
+DEMO_ALIAS_MAP: Dict[str, str] = {
+    "case-1": "case_c_mci_to_ad",
+    "twin-case-1": "case_c_mci_to_ad",
+    "case-2": "case_a_stable_cn",
+    "twin-case-2": "case_a_stable_cn",
+    "case-3": "case_b_cn_to_mci",
+    "twin-case-3": "case_b_cn_to_mci",
+    "case-4": "case_d_stable_mci",
+    "twin-case-4": "case_d_stable_mci",
+    "case-5": "case_hard_cognitive_volatility",
+    "twin-case-5": "case_hard_cognitive_volatility",
+    "case_a_stable_cn": "case_a_stable_cn",
+    "case_b_cn_to_mci": "case_b_cn_to_mci",
+    "case_c_mci_to_ad": "case_c_mci_to_ad",
+    "case_d_stable_mci": "case_d_stable_mci",
+    "case_hard_cognitive_volatility": "case_hard_cognitive_volatility",
+}
+
+
+def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
+    case_key = DEMO_ALIAS_MAP.get(twin_id)
+    if not case_key:
+        return None
+
+    candidates = [
+        TWINS_DIR.parent / "demo_replay" / f"{case_key}.json",
+        Path(__file__).resolve().parent.parent / "data" / "demo_replay" / f"{case_key}.json",
+    ]
+    target_path = next((p for p in candidates if p.exists()), None)
+    if not target_path:
+        return None
+
+    try:
+        with open(target_path, "r", encoding="utf-8") as f:
+            case_data = json.load(f)
+
+        demo = case_data["demographics"]
+        alias = case_data["alias"]
+        b_date = case_data.get("baseline_date", "2024-01-15")
+        visits_data = case_data.get("visits", [])
+
+        load_count = 2 if len(visits_data) >= 2 else len(visits_data)
+        visits: List[VisitRecord] = []
+        modalities = {
+            "basic_scores": ModalityStatus(present=True, latest={"tier": "T2b"}),
+            "biomarkers": ModalityStatus(present=False),
+            "mri_volumes": ModalityStatus(present=False),
+            "mri_image": ModalityStatus(present=False),
+            "ocr_report": ModalityStatus(present=False),
+        }
+
+        for v_in in visits_data[:load_count]:
+            sc = v_in.get("scores", {})
+            vr = VisitRecord(
+                month=v_in["month"],
+                exam_date=v_in["exam_date"],
+                age=v_in.get("age"),
+                MMSE=sc.get("MMSE"),
+                CDGLOBAL=sc.get("CDGLOBAL"),
+                TOTSCORE=sc.get("TOTSCORE"),
+                CDRSB=sc.get("CDRSB"),
+                MOCA=sc.get("MOCA"),
+                FAQ=sc.get("FAQ"),
+                FAQTOTAL=sc.get("FAQ"),
+                DX_obs=v_in.get("DX_obs"),
+                source="adni",
+            )
+            visits.append(vr)
+            if v_in.get("biomarkers") and any(v_in["biomarkers"].get(k) is not None for k in ["ABETA", "TAU", "PTAU"]):
+                modalities["biomarkers"] = ModalityStatus(present=True, latest=v_in["biomarkers"])
+            if v_in.get("mri_volumes") and any(v_in["mri_volumes"].get(k) is not None for k in ["hippo_combined_norm", "whole_brain_norm"]):
+                modalities["mri_volumes"] = ModalityStatus(present=True, latest=v_in["mri_volumes"])
+
+        latest_dict = dict(visits[-1].model_dump(exclude_none=True))
+        state = _compute_state_and_forecast(
+            demographics=demo,
+            latest_visit=latest_dict,
+            visits=visits,
+            modalities=modalities,
+            baseline_date=b_date,
+            lifestyle=None,
+        )
+
+        now = datetime.utcnow().isoformat()
+        history = [
+            HistoryEvent(
+                recorded_at=now,
+                timestamp=now,
+                stage_probs=state.stage_probs,
+                event="twin_created",
+                prob_diff=None
+            )
+        ]
+
+        twin = TwinFull(
+            twin_id=twin_id,
+            name=alias,
+            persona_label=f"{alias} — {case_data.get('trajectory_type', 'Replay')}",
+            demographics=demo,
+            baseline_date=b_date,
+            lifestyle={},
+            modalities=modalities,
+            visits=visits,
+            scenarios=[],
+            state=state,
+            history=history,
+            is_synthetic=False,
+        )
+        _save_twin_to_disk(twin)
+        return twin
+    except Exception as e:
+        print(f"Error auto-resolving demo twin '{twin_id}': {e}")
+        return None
+
+
 def get_twin(twin_id: str) -> TwinFull:
     if twin_id in _twins_cache:
         return _twins_cache[twin_id]
     twin = _load_twin_from_disk(twin_id)
     if twin is None:
+        demo_twin = _resolve_demo_twin_if_requested(twin_id)
+        if demo_twin is not None:
+            _twins_cache[twin_id] = demo_twin
+            return demo_twin
         raise HTTPException(status_code=404, detail=f"Digital Twin '{twin_id}' not found.")
     _twins_cache[twin_id] = twin
     return twin
@@ -191,8 +310,13 @@ def _compute_state_and_forecast(
         val = latest_visit.get(k)
         if val is not None and not pd.isna(val):
             inputs[k] = float(val)
-    if "FAQ" in latest_visit and latest_visit["FAQ"] is not None and "FAQTOTAL" not in inputs:
+    if "FAQ" in latest_visit and latest_visit["FAQ"] is not None and not pd.isna(latest_visit["FAQ"]):
         inputs["FAQTOTAL"] = float(latest_visit["FAQ"])
+        inputs["FAQ"] = float(latest_visit["FAQ"])
+    if "MOCA" in latest_visit and latest_visit["MOCA"] is not None and not pd.isna(latest_visit["MOCA"]):
+        inputs["MOCA"] = float(latest_visit["MOCA"])
+    elif "moca" in latest_visit and latest_visit["moca"] is not None and not pd.isna(latest_visit["moca"]):
+        inputs["MOCA"] = float(latest_visit["moca"])
 
     # Biomarkers if present
     bio_mod = modalities.get("biomarkers")
@@ -882,14 +1006,17 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     base_headline_val = base_p_ad
     base_prog_val = base_fc.conversion_prob if (base_fc and base_anchor_stage == "AD") else 0.0
 
-    base_conv_dict = {k: base_state.conversion_risk.get(k, 0.0) for k in ["12m", "24m"]}
+    base_conv_dict = {
+        "12m": base_state.conversion_risk.get("12m", 0.0),
+        "24m": base_state.conversion_risk.get("24m", 0.0),
+    }
     if base_fc and base_fc.conversion_prob is not None:
         base_conv_dict[f"{h_str}m"] = base_fc.conversion_prob
 
     baseline_payload = {
         "stage_probs": base_fc.stage_probs.model_dump() if (base_fc and base_fc.stage_probs) else base_state.stage_probs.model_dump(),
         "anchor_stage_probs": base_state.stage_probs.model_dump(),
-        "forecast": {h_str: base_fc.model_dump()} if base_fc else {},
+        "forecast": {h: pt.model_dump() for h, pt in base_state.forecast.items()},
         "conversion_risk": base_conv_dict,
         "progression_risk": base_prog_val,
         "p_ad_at_horizon": base_p_ad,
@@ -905,6 +1032,19 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
         for k, v in req.hypothetical_visit.items():
             if v is not None:
                 hypo_latest[k] = float(v)
+        # Synchronize FAQ / FAQTOTAL and MOCA / moca in hypothetical visit overrides
+        if "FAQ" in req.hypothetical_visit and req.hypothetical_visit["FAQ"] is not None:
+            hypo_latest["FAQTOTAL"] = float(req.hypothetical_visit["FAQ"])
+            hypo_latest["FAQ"] = float(req.hypothetical_visit["FAQ"])
+        elif "FAQTOTAL" in req.hypothetical_visit and req.hypothetical_visit["FAQTOTAL"] is not None:
+            hypo_latest["FAQTOTAL"] = float(req.hypothetical_visit["FAQTOTAL"])
+            hypo_latest["FAQ"] = float(req.hypothetical_visit["FAQTOTAL"])
+        if "MOCA" in req.hypothetical_visit and req.hypothetical_visit["MOCA"] is not None:
+            hypo_latest["MOCA"] = float(req.hypothetical_visit["MOCA"])
+            hypo_latest["moca"] = float(req.hypothetical_visit["MOCA"])
+        elif "moca" in req.hypothetical_visit and req.hypothetical_visit["moca"] is not None:
+            hypo_latest["MOCA"] = float(req.hypothetical_visit["moca"])
+            hypo_latest["moca"] = float(req.hypothetical_visit["moca"])
 
     # Clone modalities
     hypo_modalities = {k: v.model_copy(deep=True) for k, v in twin.modalities.items()}
@@ -941,21 +1081,28 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     if req.lifestyle:
         effective_lifestyle.update(req.lifestyle)
 
+    from ml.twin.risk_modifier import compute_lifestyle_modifier
+    l_mod = compute_lifestyle_modifier(effective_lifestyle)
+    l_mult = l_mod["decline_multiplier"]
+    l_haz = l_mod["hazard_multiplier"]
+    slider_mult = req.decline_multiplier if req.decline_multiplier is not None else 1.0
+    combined_decline = slider_mult * l_mult
+    combined_hazard = slider_mult * l_haz
+
     scen_state = _compute_state_and_forecast(
         twin.demographics, hypo_latest, hypo_visits, hypo_modalities, twin.baseline_date, effective_lifestyle
     )
 
-    decline_mult = req.decline_multiplier if req.decline_multiplier is not None else 1.0
     scen_fc_points: Dict[str, ForecastPoint] = {}
     cur_m = float(hypo_latest.get("MMSE") if hypo_latest.get("MMSE") is not None else 26.0)
     cur_c = float(hypo_latest.get("CDGLOBAL") if hypo_latest.get("CDGLOBAL") is not None else 0.5)
     cur_t = float(hypo_latest.get("TOTSCORE") if hypo_latest.get("TOTSCORE") is not None else 12.0)
 
     for h, pt in scen_state.forecast.items():
-        # Scale MMSE
+        # Scale MMSE (using slider multiplier on top of lifestyle modified trajectory)
         if pt.MMSE_mean is not None:
             d_m = pt.MMSE_mean - cur_m
-            scaled_d_m = d_m * decline_mult if d_m < 0 else d_m / decline_mult
+            scaled_d_m = d_m * slider_mult if d_m < 0 else d_m / slider_mult
             new_mean = round(max(0.0, min(30.0, cur_m + scaled_d_m)), 1)
             new_lo = round(max(0.0, pt.MMSE_lo + (scaled_d_m - d_m)), 1)
             new_hi = round(min(30.0, pt.MMSE_hi + (scaled_d_m - d_m)), 1)
@@ -965,7 +1112,7 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
         # Scale CDGLOBAL
         if pt.CDGLOBAL_mean is not None:
             d_c = pt.CDGLOBAL_mean - cur_c
-            scaled_d_c = d_c * decline_mult if d_c > 0 else d_c / decline_mult
+            scaled_d_c = d_c * slider_mult if d_c > 0 else d_c / slider_mult
             new_cdg = round(max(0.0, min(3.0, cur_c + scaled_d_c)), 2)
             new_cdg_lo = round(max(0.0, pt.CDGLOBAL_lo + (scaled_d_c - d_c)), 2)
             new_cdg_hi = round(min(3.0, pt.CDGLOBAL_hi + (scaled_d_c - d_c)), 2)
@@ -975,24 +1122,66 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
         # Scale TOTSCORE
         if pt.TOTSCORE_mean is not None:
             d_t = pt.TOTSCORE_mean - cur_t
-            scaled_d_t = d_t * decline_mult if d_t > 0 else d_t / decline_mult
+            scaled_d_t = d_t * slider_mult if d_t > 0 else d_t / slider_mult
             new_tot = round(max(0.0, min(70.0, cur_t + scaled_d_t)), 1)
             new_tot_lo = round(max(0.0, pt.TOTSCORE_lo + (scaled_d_t - d_t)), 1)
             new_tot_hi = round(min(70.0, pt.TOTSCORE_hi + (scaled_d_t - d_t)), 1)
         else:
             new_tot, new_tot_lo, new_tot_hi = None, None, None
 
-        # Re-stage at horizon with Model A (TwinStager)
+        # Re-stage at horizon with Model A (TwinStager) with full patient modalities
         fc_stage_inputs = dict(hypo_latest)
         fc_stage_inputs.update(twin.demographics)
         if new_mean is not None: fc_stage_inputs["MMSE"] = new_mean
         if new_cdg is not None: fc_stage_inputs["CDGLOBAL"] = new_cdg
         if new_tot is not None: fc_stage_inputs["TOTSCORE"] = new_tot
+        if "FAQTOTAL" in hypo_latest: fc_stage_inputs["FAQTOTAL"] = hypo_latest["FAQTOTAL"]
+        elif "FAQ" in hypo_latest: fc_stage_inputs["FAQTOTAL"] = hypo_latest["FAQ"]
+        if "MOCA" in hypo_latest: fc_stage_inputs["MOCA"] = hypo_latest["MOCA"]
+        elif "moca" in hypo_latest: fc_stage_inputs["MOCA"] = hypo_latest["moca"]
+
+        # Biomarkers
+        bio_mod = hypo_modalities.get("biomarkers")
+        if bio_mod and bio_mod.present and bio_mod.latest:
+            for k in ["ABETA", "TAU", "PTAU"]:
+                if bio_mod.latest.get(k) is not None:
+                    fc_stage_inputs[k] = float(bio_mod.latest[k])
+                    fc_stage_inputs[f"{k}_censored"] = 0
+
+        # MRI volumes
+        mri_mod = hypo_modalities.get("mri_volumes")
+        if mri_mod and mri_mod.present and mri_mod.latest:
+            m = mri_mod.latest
+            fc_stage_inputs["mri_obs"] = 1
+            fc_stage_inputs["mri_gap_months"] = 0
+            tot_h = m.get("hippocampus")
+            icv = m.get("icv")
+            if tot_h is not None and icv and icv > 0:
+                fc_stage_inputs["hippo_combined_norm"] = float(tot_h) / float(icv)
+            if m.get("entorhinal"):
+                fc_stage_inputs["lh_entorhinal_thickness"] = float(m["entorhinal"])
+                fc_stage_inputs["rh_entorhinal_thickness"] = float(m["entorhinal"])
+            if m.get("ventricles") and icv and icv > 0:
+                fc_stage_inputs["lateral_ventricle_combined_norm"] = float(m["ventricles"]) / float(icv)
+            if m.get("whole_brain") and icv and icv > 0:
+                fc_stage_inputs["whole_brain_norm"] = float(m["whole_brain"]) / float(icv)
+
         st_res = get_stager().predict_one(fc_stage_inputs)
+        raw_cn = float(st_res["probs"]["CN"])
+        raw_mci = float(st_res["probs"]["MCI"])
+        raw_ad = float(st_res["probs"]["AD"])
+
+        # Continuous smooth lifestyle hazard adjustment at future horizon:
+        horizon_weight = float(h) / 12.0
+        log_mult = math.log(max(0.5, min(2.0, combined_hazard)))
+        adj_ad = raw_ad * math.exp(log_mult * 0.7 * horizon_weight)
+        adj_cn = raw_cn * math.exp(-log_mult * 0.7 * horizon_weight)
+        adj_mci = raw_mci
+        tot_adj = adj_ad + adj_cn + adj_mci
         h_stage_probs = {
-            "CN": round(float(st_res["probs"]["CN"]), 4),
-            "MCI": round(float(st_res["probs"]["MCI"]), 4),
-            "AD": round(float(st_res["probs"]["AD"]), 4),
+            "CN": round(adj_cn / tot_adj, 4),
+            "MCI": round(adj_mci / tot_adj, 4),
+            "AD": round(adj_ad / tot_adj, 4),
         }
 
         # Conversion / Progression risk at horizon
@@ -1001,9 +1190,10 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
             d_m_val = (new_mean - cur_m) if new_mean is not None else 0.0
             z_m = (-3.0 - d_m_val) / sigma_m
             prog_risk = round(float(0.5 * (1.0 + math.erf(z_m / math.sqrt(2.0)))), 4)
-            h_conv_risk = max(0.05, min(0.98, prog_risk))
+            h_conv_risk = max(0.05, min(0.98, prog_risk * combined_hazard))
         else:
-            h_conv_risk = round(min(1.0, max(0.0, (pt.conversion_prob or 0.0) * decline_mult)), 4) if pt.conversion_prob is not None else 0.0
+            base_conv = pt.conversion_prob if pt.conversion_prob is not None else twin.state.conversion_risk.get(f"{h}m", 0.2)
+            h_conv_risk = round(min(0.99, max(0.01, base_conv * combined_hazard)), 4)
 
         scen_fc_points[h] = ForecastPoint(
             month=pt.month,
@@ -1028,14 +1218,16 @@ def run_scenario(twin_id: str, req: ScenarioRequest) -> ScenarioResponse:
     scen_headline_metric = "p_ad_at_horizon"
     scen_headline_val = scen_p_ad
     scen_prog_val = scen_fc_target.conversion_prob if (scen_fc_target and scen_anchor_stage == "AD") else 0.0
-    scen_conv_dict = {f"{h}m": scen_fc_points[h].conversion_prob for h in ["12", "24"] if h in scen_fc_points}
-    if not scen_conv_dict:
-        scen_conv_dict = {f"{h_str}m": scen_headline_val}
+    
+    scen_conv_dict = {
+        "12m": scen_fc_points.get("12", scen_fc_points.get(h_str)).conversion_prob or 0.0,
+        "24m": scen_fc_points.get("24", scen_fc_points.get(h_str)).conversion_prob or 0.0,
+    }
 
     scen_payload = {
         "stage_probs": scen_fc_target.stage_probs.model_dump() if (scen_fc_target and scen_fc_target.stage_probs) else scen_state.stage_probs.model_dump(),
         "anchor_stage_probs": scen_state.stage_probs.model_dump(),
-        "forecast": {h_str: scen_fc_target.model_dump()} if scen_fc_target else {},
+        "forecast": {h: pt.model_dump() for h, pt in scen_fc_points.items()},
         "conversion_risk": scen_conv_dict,
         "progression_risk": scen_prog_val,
         "p_ad_at_horizon": scen_p_ad,

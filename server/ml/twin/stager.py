@@ -73,7 +73,7 @@ class TwinStager:
             return "T3"
 
         # Check for Detailed Neuropsych (T2b)
-        has_t2b = any(notna(c) for c in ["TOTSCORE", "MOCA", "FAQTOTAL"])
+        has_t2b = any(notna(c) for c in ["TOTSCORE", "MOCA", "FAQTOTAL", "FAQ", "moca"])
         if has_t2b:
             return "T2b"
 
@@ -238,6 +238,20 @@ class TwinStager:
             inputs["MMSE"] = inputs["MMSCORE"]
         elif "MMSE" in inputs and "MMSCORE" not in inputs:
             inputs["MMSCORE"] = inputs["MMSE"]
+
+        # Synchronize FAQ / FAQTOTAL aliases (ADNI tabular uses FAQTOTAL; intake/UI uses FAQ)
+        if "FAQTOTAL" not in inputs and "FAQ" in inputs and inputs["FAQ"] is not None:
+            inputs["FAQTOTAL"] = inputs["FAQ"]
+        elif "FAQ" not in inputs and "FAQTOTAL" in inputs and inputs["FAQTOTAL"] is not None:
+            inputs["FAQ"] = inputs["FAQTOTAL"]
+        elif "FAQ" in inputs and "FAQTOTAL" in inputs and inputs["FAQ"] is not None:
+            inputs["FAQTOTAL"] = inputs["FAQ"]
+
+        # Synchronize MOCA / moca aliases
+        if "MOCA" not in inputs and "moca" in inputs and inputs["moca"] is not None:
+            inputs["MOCA"] = inputs["moca"]
+        elif "moca" not in inputs and "MOCA" in inputs and inputs["MOCA"] is not None:
+            inputs["moca"] = inputs["MOCA"]
 
         row = pd.Series({col: inputs.get(col, np.nan) for col in self.feature_list})
         tier = self._available_tier(row)

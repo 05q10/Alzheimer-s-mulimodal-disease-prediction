@@ -84,6 +84,10 @@ class TwinProgression:
                 # Fallback for MMSE vs MMSCORE
                 if col == "MMSE":
                     val = visit.get("MMSCORE", visit.get("mmse"))
+                elif col == "FAQTOTAL":
+                    val = visit.get("FAQ", visit.get("faq"))
+                elif col == "MOCA":
+                    val = visit.get("moca", visit.get("MoCA"))
             row[f"feat_{col}"] = float(val) if val is not None and not pd.isna(val) else np.nan
         return pd.DataFrame([row])
 

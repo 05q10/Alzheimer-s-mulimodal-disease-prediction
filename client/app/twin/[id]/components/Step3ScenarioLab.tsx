@@ -634,12 +634,17 @@ export default function Step3ScenarioLab({ twin, onTwinUpdated }: Step3ScenarioL
                 <input
                   type="range"
                   min={0}
-                  max={20}
+                  max={35}
                   step={1}
                   value={alcohol}
                   onChange={(e) => setAlcohol(Number(e.target.value))}
                   className="w-full accent-purple-500 cursor-pointer h-1.5 bg-neutral-800 rounded-lg appearance-none"
                 />
+                <div className="flex justify-between text-[10px] text-neutral-500 mt-0.5 font-mono">
+                  <span className={alcohol <= 14 ? "text-emerald-400" : ""}>Light (&le;14)</span>
+                  <span className={alcohol > 14 && alcohol <= 21 ? "text-amber-400 font-semibold" : ""}>Moderate (15-21)</span>
+                  <span className={alcohol > 21 ? "text-rose-400 font-semibold" : ""}>Excessive (&gt;21 RR=1.19)</span>
+                </div>
               </div>
 
               {/* Physical Activity Slider */}
