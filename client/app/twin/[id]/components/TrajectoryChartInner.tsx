@@ -620,9 +620,9 @@ export default function TrajectoryChartInner({
                             <span>Likely range (90%):</span>
                             <span className="font-mono text-purple-200 font-semibold">
                               [{row.uncertaintyLo} – {row.uncertaintyHi}]
-                              {inBand !== null && (
-                                <span className={`ml-1.5 px-1 py-0.5 rounded text-[10px] font-bold ${inBand ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800" : "bg-amber-950/80 text-amber-400 border border-amber-800"}`}>
-                                  {inBand ? "✓ In Band" : "⚠ Out"}
+                              {inBand === true && (
+                                <span className="ml-1.5 px-1 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
+                                  ✓ In Band
                                 </span>
                               )}
                             </span>
