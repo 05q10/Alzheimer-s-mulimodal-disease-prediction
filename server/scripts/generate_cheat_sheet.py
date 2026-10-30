@@ -12,3 +12,4 @@ if root_script.exists():
     from generate_cheat_sheet import run_and_generate
     if __name__ == "__main__":
         run_and_generate()
+
