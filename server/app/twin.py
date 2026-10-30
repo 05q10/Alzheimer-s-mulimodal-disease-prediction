@@ -176,7 +176,7 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
         v0_bio = visits_data[0].get("biomarkers", {})
         v0_mri = visits_data[0].get("mri_volumes", {})
 
-        load_count = 2 if len(visits_data) >= 2 else len(visits_data)
+        load_count = len(visits_data)
         visits: List[VisitRecord] = []
         modalities = {
             "basic_scores": ModalityStatus(present=True, latest={"tier": "T2b"}),
@@ -242,6 +242,30 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
             if mri_dict and any(mri_dict.get(k) is not None for k in ["hippo_combined_norm", "whole_brain_norm"]):
                 modalities["mri_volumes"] = ModalityStatus(present=True, latest=mri_dict)
 
+        # Baseline forecast for multi-visit actual vs predicted comparison
+        v0_dict = dict(visits[0].model_dump(exclude_none=True))
+        base_state = _compute_state_and_forecast(
+            demographics=demo_extra,
+            latest_visit=v0_dict,
+            visits=[visits[0]],
+            modalities=modalities,
+            baseline_date=b_date,
+            lifestyle=None,
+        )
+
+        for v in visits:
+            h_str = str(v.month)
+            pt = base_state.forecast.get(h_str) or base_state.forecast.get(f"{v.month}m")
+            if pt:
+                v.predicted_scores = {
+                    "MMSE": pt.MMSE_mean,
+                    "MMSE_band": {"lo": pt.MMSE_lo, "hi": pt.MMSE_hi},
+                    "CDGLOBAL": pt.CDGLOBAL_mean,
+                    "CDGLOBAL_band": {"lo": pt.CDGLOBAL_lo, "hi": pt.CDGLOBAL_hi},
+                    "TOTSCORE": pt.TOTSCORE_mean,
+                    "TOTSCORE_band": {"lo": pt.TOTSCORE_lo, "hi": pt.TOTSCORE_hi},
+                }
+
         latest_dict = dict(visits[-1].model_dump(exclude_none=True))
         state = _compute_state_and_forecast(
             demographics=demo_extra,
@@ -251,6 +275,11 @@ def _resolve_demo_twin_if_requested(twin_id: str) -> Optional[TwinFull]:
             baseline_date=b_date,
             lifestyle=None,
         )
+
+        # Ensure multi-horizon baseline forecast points [6, 12, 24] remain available on the twin state
+        for h, pt in base_state.forecast.items():
+            if h not in state.forecast:
+                state.forecast[h] = pt
 
         now = datetime.utcnow().isoformat()
         history = [

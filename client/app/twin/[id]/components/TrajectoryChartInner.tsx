@@ -57,13 +57,71 @@ interface ChartRow {
 
 // Compute calendar date e.g. "Oct 2026", "Apr 2027"
 function computeCalendarDate(baseStr?: string, monthsOffset = 0): string {
+  if (isNaN(monthsOffset)) return "+0m";
   try {
-    const d = new Date(baseStr || new Date().toISOString().split("T")[0]);
+    const validBase = baseStr && !isNaN(Date.parse(baseStr)) ? baseStr : new Date().toISOString().split("T")[0];
+    const d = new Date(validBase);
     d.setMonth(d.getMonth() + monthsOffset);
     return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   } catch {
     return `+${monthsOffset}m`;
   }
+}
+
+// Robust observed metric score extraction supporting flat, nested, and alias formats
+function getObservedMetric(visit: any, metric: MetricType): number | null {
+  if (!visit) return null;
+  const s = visit.scores || {};
+  let val: any = null;
+
+  if (metric === "MMSE") {
+    val = visit.MMSE ?? visit.MMSCORE ?? visit.mmse ?? visit.mmscore ?? s.MMSE ?? s.MMSCORE ?? s.mmse ?? s.mmscore;
+  } else if (metric === "CDGLOBAL") {
+    val = visit.CDGLOBAL ?? visit.CDR ?? visit.cdr ?? visit.cdglobal ?? s.CDGLOBAL ?? s.CDR ?? s.cdr ?? s.cdglobal;
+  } else if (metric === "TOTSCORE") {
+    val = visit.TOTSCORE ?? visit.ADAS11 ?? visit.ADAS ?? visit.totscore ?? visit.adas11 ?? visit.adas ?? s.TOTSCORE ?? s.ADAS11 ?? s.ADAS ?? s.totscore ?? s.adas11;
+  }
+
+  if (val !== undefined && val !== null && val !== "" && !isNaN(Number(val))) {
+    return Number(Number(val).toFixed(metric === "CDGLOBAL" ? 2 : 1));
+  }
+  return null;
+}
+
+// Robust forecast metric extraction for mean and 90% uncertainty bounds
+function getForecastMetric(
+  fc: any,
+  metric: MetricType,
+  keyType: "mean" | "lo" | "hi"
+): number | null {
+  if (!fc) return null;
+  const keyMap = {
+    MMSE: { mean: "MMSE_mean", lo: "MMSE_lo", hi: "MMSE_hi" },
+    CDGLOBAL: { mean: "CDGLOBAL_mean", lo: "CDGLOBAL_lo", hi: "CDGLOBAL_hi" },
+    TOTSCORE: { mean: "TOTSCORE_mean", lo: "TOTSCORE_lo", hi: "TOTSCORE_hi" },
+  };
+
+  const specificKey = keyMap[metric][keyType];
+  if (fc[specificKey] !== undefined && fc[specificKey] !== null && !isNaN(Number(fc[specificKey]))) {
+    return Number(Number(fc[specificKey]).toFixed(metric === "CDGLOBAL" ? 2 : 1));
+  }
+
+  // Fallback for mean value if flat/alias key is provided (e.g. { MMSE: 24.5 })
+  if (keyType === "mean") {
+    let val: any = null;
+    if (metric === "MMSE") {
+      val = fc.MMSE ?? fc.MMSCORE ?? fc.mmse ?? fc.scores?.MMSE ?? fc.predicted_scores?.MMSE;
+    } else if (metric === "CDGLOBAL") {
+      val = fc.CDGLOBAL ?? fc.CDR ?? fc.cdr ?? fc.cdglobal ?? fc.scores?.CDGLOBAL ?? fc.predicted_scores?.CDGLOBAL;
+    } else if (metric === "TOTSCORE") {
+      val = fc.TOTSCORE ?? fc.ADAS11 ?? fc.ADAS ?? fc.totscore ?? fc.scores?.TOTSCORE ?? fc.predicted_scores?.TOTSCORE;
+    }
+    if (val !== undefined && val !== null && !isNaN(Number(val))) {
+      return Number(Number(val).toFixed(metric === "CDGLOBAL" ? 2 : 1));
+    }
+  }
+
+  return null;
 }
 
 export default function TrajectoryChartInner({
@@ -128,24 +186,27 @@ export default function TrajectoryChartInner({
     const activeForecast = simulatedForecast || twin.state.forecast || {};
 
     const maxObsMonth = visits.length > 0 ? Math.max(...visits.map((v) => v.month)) : 0;
-    const latestVisit = visits.find((v) => v.month === maxObsMonth);
-    const latestVal = latestVisit ? (latestVisit[metric] as number | null) : null;
 
-    // Collect all unique months
+    // Collect all valid finite months
     const monthSet = new Set<number>();
     visits.forEach((v) => {
-      if (typeof v.month === "number" && !isNaN(v.month)) {
-        monthSet.add(v.month);
+      const mNum = Number(v.month);
+      if (!isNaN(mNum) && isFinite(mNum)) {
+        monthSet.add(mNum);
       }
     });
-    Object.keys(activeForecast).forEach((k) => {
-      const parsed = parseInt(k, 10);
-      if (!isNaN(parsed)) monthSet.add(parsed);
+    Object.entries(activeForecast).forEach(([k, pt]: [string, any]) => {
+      const ptMonth = pt?.month !== undefined ? Number(pt.month) : parseInt(k, 10);
+      if (!isNaN(ptMonth) && isFinite(ptMonth)) {
+        monthSet.add(ptMonth);
+      }
     });
     if (baselineForecast) {
-      Object.keys(baselineForecast).forEach((k) => {
-        const parsed = parseInt(k, 10);
-        if (!isNaN(parsed)) monthSet.add(parsed);
+      Object.entries(baselineForecast).forEach(([k, pt]: [string, any]) => {
+        const ptMonth = pt?.month !== undefined ? Number(pt.month) : parseInt(k, 10);
+        if (!isNaN(ptMonth) && isFinite(ptMonth)) {
+          monthSet.add(ptMonth);
+        }
       });
     }
 
@@ -155,27 +216,43 @@ export default function TrajectoryChartInner({
 
     const rows: ChartRow[] = sortedMonths.map((m) => {
       const visit = visits.find((v) => v.month === m);
-      const fc = activeForecast[String(m)] || activeForecast[`${m}m`];
+      const fc = Object.values(activeForecast).find((p: any) => p?.month === m)
+        || activeForecast[String(m)]
+        || activeForecast[`${m}m`];
 
-      const isObserved = m <= maxObsMonth;
-      const obsVal = visit ? (visit[metric] as number | null) : null;
+      // Extract observed metric score using robust extractor
+      const obsVal = getObservedMetric(visit, metric);
+      const isObserved = obsVal !== null;
 
-      let meanVal: number | null = null;
-      let loVal: number | null = null;
-      let hiVal: number | null = null;
+      // Extract predicted score and 90% bounds
+      let meanVal = getForecastMetric(fc, metric, "mean");
+      let loVal = getForecastMetric(fc, metric, "lo");
+      let hiVal = getForecastMetric(fc, metric, "hi");
 
-      if (fc) {
-        meanVal = (fc[metricConfig.key_mean] as number | null) ?? null;
-        loVal = (fc[metricConfig.key_lo] as number | null) ?? null;
-        hiVal = (fc[metricConfig.key_hi] as number | null) ?? null;
-      } else if (visit && (visit as any).predicted_scores?.[metric] !== undefined) {
-        meanVal = (visit as any).predicted_scores[metric];
-        const b = (visit as any).predicted_scores[`${metric}_band`];
-        if (b) {
-          loVal = b.lo;
-          hiVal = b.hi;
+      if (meanVal === null && visit) {
+        // Fallback to visit predicted_scores or pre_visit_prediction
+        const ps = (visit as any).predicted_scores || {};
+        const pvp = (visit as any).pre_visit_prediction || {};
+        if (ps[metric] !== undefined && ps[metric] !== null) {
+          meanVal = Number(ps[metric]);
+          const b = ps[`${metric}_band`];
+          if (b) {
+            loVal = Number(b.lo);
+            hiVal = Number(b.hi);
+          }
+        } else if (pvp[`predicted_${metric}`] !== undefined && pvp[`predicted_${metric}`] !== null) {
+          meanVal = Number(pvp[`predicted_${metric}`]);
+          const b = pvp[`predicted_${metric}_band`];
+          if (b) {
+            loVal = Number(b.lo);
+            hiVal = Number(b.hi);
+          }
+        } else if (m === 0 && obsVal !== null) {
+          meanVal = obsVal;
+          loVal = obsVal;
+          hiVal = obsVal;
         }
-      } else if (m === 0 && obsVal !== null) {
+      } else if (meanVal === null && m === 0 && obsVal !== null) {
         meanVal = obsVal;
         loVal = obsVal;
         hiVal = obsVal;
@@ -194,16 +271,18 @@ export default function TrajectoryChartInner({
       const bandOffset = loVal;
       const bandSpan = hiVal !== null && loVal !== null ? Math.max(0, hiVal - loVal) : null;
 
-      // Baseline comparison values
+      // Baseline comparison values (Scenario Lab mode)
       let blMean: number | null = null;
       let blLo: number | null = null;
       let blHi: number | null = null;
       if (baselineForecast) {
-        const blFc = baselineForecast[String(m)] || baselineForecast[`${m}m`];
+        const blFc = Object.values(baselineForecast).find((p: any) => p?.month === m)
+          || baselineForecast[String(m)]
+          || baselineForecast[`${m}m`];
         if (blFc) {
-          blMean = (blFc[metricConfig.key_mean] as number | null) ?? null;
-          blLo = (blFc[metricConfig.key_lo] as number | null) ?? null;
-          blHi = (blFc[metricConfig.key_hi] as number | null) ?? null;
+          blMean = getForecastMetric(blFc, metric, "mean");
+          blLo = getForecastMetric(blFc, metric, "lo");
+          blHi = getForecastMetric(blFc, metric, "hi");
         } else if (m === maxObsMonth && obsVal !== null) {
           blMean = obsVal;
           blLo = obsVal;
@@ -243,29 +322,31 @@ export default function TrajectoryChartInner({
       if (metric === "MMSE") {
         domain = [
           Math.max(0, Math.floor(minObsOrFc - 2)),
-          Math.min(30, Math.ceil(maxObsOrFc + 2)),
+          30,
         ];
       } else if (metric === "CDGLOBAL") {
         domain = [
-          Math.max(0, Number((minObsOrFc - 0.25).toFixed(1))),
-          Math.min(3.0, Number((maxObsOrFc + 0.25).toFixed(1))),
+          0,
+          Math.min(3.0, Math.max(2.0, Number((maxObsOrFc + 0.5).toFixed(1)))),
         ];
       } else {
         domain = [
-          Math.max(0, Math.floor(minObsOrFc - 3)),
-          Math.min(70, Math.ceil(maxObsOrFc + 4)),
+          0,
+          Math.min(70, Math.max(35, Math.ceil(maxObsOrFc + 5))),
         ];
       }
     }
 
     // Plain English Line: e.g. "Forecast: MMSE 26 -> 24.1 at 12 months, range 21.5 to 26.7"
-    const baselineM0Val = visits[0] ? (visits[0][metric] as number | null) : null;
-    const fc12 = activeForecast["12"];
+    const baselineM0Val = visits[0] ? getObservedMetric(visits[0], metric) : null;
+    const fc12 = Object.values(activeForecast).find((p: any) => p?.month === 12)
+      || activeForecast["12"]
+      || activeForecast["12m"];
     let plainText = "";
     if (baselineM0Val !== null && fc12) {
-      const fc12Val = fc12[metricConfig.key_mean] as number | null;
-      const lo12 = fc12[metricConfig.key_lo] as number | null;
-      const hi12 = fc12[metricConfig.key_hi] as number | null;
+      const fc12Val = getForecastMetric(fc12, metric, "mean");
+      const lo12 = getForecastMetric(fc12, metric, "lo");
+      const hi12 = getForecastMetric(fc12, metric, "hi");
       if (fc12Val !== null && lo12 !== null && hi12 !== null) {
         plainText = `Forecast: ${metric} ${baselineM0Val} → ${fc12Val} at 12 months, likely range ${lo12} to ${hi12}.`;
       }
@@ -462,19 +543,21 @@ export default function TrajectoryChartInner({
                 const hasObs = row.observed !== null && row.observed !== undefined;
                 const predVal = row.predictedVal ?? row.forecast;
                 const hasPred = predVal !== null && predVal !== undefined;
-                const diff = hasObs && hasPred && row.month > 0 ? Number((predVal! - row.observed!).toFixed(1)) : null;
-                const inBand = hasObs && row.uncertaintyLo !== null && row.uncertaintyHi !== null
+                const diff = hasObs && hasPred && row.month > 0
+                  ? Number((predVal! - row.observed!).toFixed(metric === "CDGLOBAL" ? 2 : 1))
+                  : null;
+                const inBand = hasObs && row.uncertaintyLo !== null && row.uncertaintyLo !== undefined && row.uncertaintyHi !== null && row.uncertaintyHi !== undefined
                   ? (row.observed! >= row.uncertaintyLo && row.observed! <= row.uncertaintyHi)
                   : null;
 
                 return (
-                  <div className="rounded-xl bg-neutral-950/95 border border-white/20 p-3.5 shadow-2xl backdrop-blur-md text-xs min-w-[230px]">
+                  <div className="rounded-xl bg-neutral-950/95 border border-white/20 p-3.5 shadow-2xl backdrop-blur-md text-xs min-w-[240px]">
                     <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-white/10">
                       <p className="font-bold text-white text-sm">
                         {label}
                       </p>
                       <span className="text-[10px] text-neutral-400 font-mono">
-                        {row.month === 0 ? "Baseline" : `Month ${row.month}`}
+                        {row.month === 0 ? "Baseline (M0)" : `Month ${row.month}`}
                       </span>
                     </div>
 
@@ -496,7 +579,7 @@ export default function TrajectoryChartInner({
                           <div className="flex justify-between gap-4 py-0.5 text-neutral-400">
                             <span>Baseline Forecast:</span>
                             <span className="font-mono font-bold">
-                              {row.baselineForecastVal}
+                              {row.baselineForecastVal} {metricConfig.unit}
                             </span>
                           </div>
                         )}
@@ -504,7 +587,7 @@ export default function TrajectoryChartInner({
                           <div className="flex justify-between gap-4 py-0.5 text-purple-300">
                             <span>Scenario Forecast:</span>
                             <span className="font-mono font-bold">
-                              {row.scenarioForecastVal}
+                              {row.scenarioForecastVal} {metricConfig.unit}
                             </span>
                           </div>
                         )}
@@ -526,7 +609,7 @@ export default function TrajectoryChartInner({
                         {diff !== null && (
                           <div className="flex justify-between gap-4 py-0.5 text-neutral-400">
                             <span>Residual Error (Δ):</span>
-                            <span className={`font-mono font-semibold ${Math.abs(diff) <= 1.5 ? "text-emerald-400" : "text-amber-400"}`}>
+                            <span className={`font-mono font-semibold ${Math.abs(diff) <= (metric === "CDGLOBAL" ? 0.2 : 1.5) ? "text-emerald-400" : "text-amber-400"}`}>
                               {diff > 0 ? `+${diff}` : diff} pts
                             </span>
                           </div>
@@ -609,9 +692,53 @@ export default function TrajectoryChartInner({
                   dataKey="observed"
                   stroke="#3b82f6"
                   strokeWidth={3}
-                  dot={{ r: 6, fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2 }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (
+                      !payload ||
+                      payload.observed === null ||
+                      payload.observed === undefined ||
+                      cx == null ||
+                      cy == null ||
+                      typeof cx !== "number" ||
+                      typeof cy !== "number" ||
+                      isNaN(cx) ||
+                      isNaN(cy)
+                    ) {
+                      return null;
+                    }
+                    const formattedVal =
+                      typeof payload.observed === "number"
+                        ? metric === "CDGLOBAL"
+                          ? payload.observed.toFixed(1)
+                          : payload.observed.toFixed(1).replace(/\.0$/, "")
+                        : payload.observed;
+
+                    return (
+                      <g key={`dot-obs-${payload.month}`}>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={6}
+                          fill="#3b82f6"
+                          stroke="#1d4ed8"
+                          strokeWidth={2}
+                        />
+                        <text
+                          x={cx}
+                          y={cy + 16}
+                          fill="#93c5fd"
+                          fontSize={10}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {formattedVal}
+                        </text>
+                      </g>
+                    );
+                  }}
                   activeDot={{ r: 8, fill: "#60a5fa" }}
-                  connectNulls={false}
+                  connectNulls={true}
                 />
 
                 {/* Baseline Forecast (Dashed Grey Line) */}
@@ -640,6 +767,7 @@ export default function TrajectoryChartInner({
                     if (
                       !payload ||
                       payload.scenarioForecastVal === null ||
+                      payload.scenarioForecastVal === undefined ||
                       cx == null ||
                       cy == null ||
                       typeof cx !== "number" ||
@@ -649,7 +777,13 @@ export default function TrajectoryChartInner({
                     ) {
                       return null;
                     }
-                    const showLabel = [6, 12, 24].includes(payload.month);
+                    const formattedVal =
+                      typeof payload.scenarioForecastVal === "number"
+                        ? metric === "CDGLOBAL"
+                          ? payload.scenarioForecastVal.toFixed(1)
+                          : payload.scenarioForecastVal.toFixed(1).replace(/\.0$/, "")
+                        : payload.scenarioForecastVal;
+
                     return (
                       <g key={`dot-sc-${payload.month}`}>
                         <circle
@@ -660,18 +794,16 @@ export default function TrajectoryChartInner({
                           stroke="#581c87"
                           strokeWidth={2}
                         />
-                        {showLabel && (
-                          <text
-                            x={cx}
-                            y={cy - 10}
-                            fill="#d8b4fe"
-                            fontSize={10}
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {payload.scenarioForecastVal}
-                          </text>
-                        )}
+                        <text
+                          x={cx}
+                          y={cy - 10}
+                          fill="#d8b4fe"
+                          fontSize={10}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {formattedVal}
+                        </text>
                       </g>
                     );
                   }}
@@ -708,9 +840,53 @@ export default function TrajectoryChartInner({
                   dataKey="observed"
                   stroke="#3b82f6"
                   strokeWidth={3}
-                  dot={{ r: 6, fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2 }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (
+                      !payload ||
+                      payload.observed === null ||
+                      payload.observed === undefined ||
+                      cx == null ||
+                      cy == null ||
+                      typeof cx !== "number" ||
+                      typeof cy !== "number" ||
+                      isNaN(cx) ||
+                      isNaN(cy)
+                    ) {
+                      return null;
+                    }
+                    const formattedVal =
+                      typeof payload.observed === "number"
+                        ? metric === "CDGLOBAL"
+                          ? payload.observed.toFixed(1)
+                          : payload.observed.toFixed(1).replace(/\.0$/, "")
+                        : payload.observed;
+
+                    return (
+                      <g key={`dot-obs-${payload.month}`}>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={6}
+                          fill="#3b82f6"
+                          stroke="#1d4ed8"
+                          strokeWidth={2}
+                        />
+                        <text
+                          x={cx}
+                          y={cy + 16}
+                          fill="#93c5fd"
+                          fontSize={10}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {formattedVal}
+                        </text>
+                      </g>
+                    );
+                  }}
                   activeDot={{ r: 8, fill: "#60a5fa" }}
-                  connectNulls={false}
+                  connectNulls={true}
                 />
 
                 {/* Forecast Trajectory (Dashed Purple Line with labelled dots at 6, 12, 24m) */}
@@ -726,6 +902,7 @@ export default function TrajectoryChartInner({
                     if (
                       !payload ||
                       payload.forecast === null ||
+                      payload.forecast === undefined ||
                       cx == null ||
                       cy == null ||
                       typeof cx !== "number" ||
@@ -735,7 +912,13 @@ export default function TrajectoryChartInner({
                     ) {
                       return null;
                     }
-                    const showLabel = [6, 12, 24].includes(payload.month);
+                    const formattedVal =
+                      typeof payload.forecast === "number"
+                        ? metric === "CDGLOBAL"
+                          ? payload.forecast.toFixed(1)
+                          : payload.forecast.toFixed(1).replace(/\.0$/, "")
+                        : payload.forecast;
+
                     return (
                       <g key={`dot-fc-${payload.month}`}>
                         <circle
@@ -746,18 +929,16 @@ export default function TrajectoryChartInner({
                           stroke="#581c87"
                           strokeWidth={2}
                         />
-                        {showLabel && (
-                          <text
-                            x={cx}
-                            y={cy - 10}
-                            fill="#d8b4fe"
-                            fontSize={10}
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {payload.forecast}
-                          </text>
-                        )}
+                        <text
+                          x={cx}
+                          y={cy - 10}
+                          fill="#d8b4fe"
+                          fontSize={10}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {formattedVal}
+                        </text>
                       </g>
                     );
                   }}

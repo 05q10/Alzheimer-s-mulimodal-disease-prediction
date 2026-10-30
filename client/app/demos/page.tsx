@@ -12,6 +12,8 @@ import {
   FALLBACK_DEMO_CASES,
   TwinFull,
   VisitRecord,
+  ForecastPoint,
+  computeCalendarDate,
 } from "../lib/api";
 import { usePatientStore } from "../store/patientStore";
 import {
@@ -92,6 +94,13 @@ export default function DemosPage() {
         source: "synthetic",
         stage: v.stage,
         stage_probs: v.stage_probs,
+        MMSE: v.MMSE,
+        CDGLOBAL: v.CDGLOBAL,
+        TOTSCORE: v.TOTSCORE,
+        FAQ: v.FAQ,
+        MOCA: v.MOCA,
+        functionalAssessment: v.functionalAssessment,
+        adl: v.adl,
         scores: {
           MMSE: v.MMSE,
           CDGLOBAL: v.CDGLOBAL,
@@ -145,6 +154,45 @@ export default function DemosPage() {
 
       const latestVisit = builtVisits[builtVisits.length - 1];
 
+      // Build Model B Forecast points for future horizons [6, 12, 24]
+      const curM = c.visits[nextIdx].month;
+      const curMmse = c.visits[nextIdx].MMSE ?? 26;
+      const curCdg = c.visits[nextIdx].CDGLOBAL ?? 0.5;
+      const curAdas = c.visits[nextIdx].TOTSCORE ?? 12.0;
+
+      const builtForecast: Record<string, ForecastPoint> = {};
+      [6, 12, 24].forEach((h) => {
+        const targetM = curM + h;
+        const futureV = c.visits.find((v) => v.month === targetM);
+        const mmseMean = futureV?.MMSE ?? (c.visits[nextIdx].stage === "AD" ? Math.max(0, curMmse - (h / 12) * 2.8) : c.visits[nextIdx].stage === "MCI" ? Math.max(0, curMmse - (h / 12) * 1.8) : Math.max(0, curMmse - (h / 12) * 0.3));
+        const cdgMean = futureV?.CDGLOBAL ?? (c.visits[nextIdx].stage === "AD" ? Math.min(3.0, curCdg + (h / 12) * 0.35) : c.visits[nextIdx].stage === "MCI" ? Math.min(3.0, curCdg + (h / 12) * 0.25) : curCdg);
+        const totMean = futureV?.TOTSCORE ?? (c.visits[nextIdx].stage === "AD" ? Math.min(70, curAdas + (h / 12) * 4.5) : c.visits[nextIdx].stage === "MCI" ? Math.min(70, curAdas + (h / 12) * 3.0) : Math.min(70, curAdas + (h / 12) * 0.8));
+
+        const fp: ForecastPoint = {
+          month: targetM,
+          date: computeCalendarDate(c.baseline_date, targetM),
+          MMSE_mean: Number(mmseMean.toFixed(1)),
+          MMSE_lo: Number(Math.max(0, mmseMean - (h === 6 ? 1.8 : h === 12 ? 2.4 : 3.0)).toFixed(1)),
+          MMSE_hi: Number(Math.min(30, mmseMean + (h === 6 ? 1.8 : h === 12 ? 2.4 : 3.0)).toFixed(1)),
+          CDGLOBAL_mean: Number(cdgMean.toFixed(2)),
+          CDGLOBAL_lo: Number(Math.max(0, cdgMean - (h === 6 ? 0.15 : 0.25)).toFixed(2)),
+          CDGLOBAL_hi: Number(Math.min(3.0, cdgMean + (h === 6 ? 0.15 : 0.25)).toFixed(2)),
+          TOTSCORE_mean: Number(totMean.toFixed(1)),
+          TOTSCORE_lo: Number(Math.max(0, totMean - (h === 6 ? 2.5 : h === 12 ? 3.5 : 4.5)).toFixed(1)),
+          TOTSCORE_hi: Number(Math.min(70, totMean + (h === 6 ? 2.5 : h === 12 ? 3.5 : 4.5)).toFixed(1)),
+          stage_probs: {
+            CN: Math.max(0.01, c.visits[nextIdx].stage_probs.CN - (h / 24) * 0.1),
+            MCI: Math.max(0.05, c.visits[nextIdx].stage_probs.MCI + (c.visits[nextIdx].stage === "CN" ? 0.08 : -0.05)),
+            AD: Math.min(0.99, c.visits[nextIdx].stage_probs.AD + (h / 12) * 0.15),
+          },
+          conversion_prob: Math.min(0.99, Math.max(0.02, c.visits[nextIdx].stage_probs.AD + (h / 12) * 0.12)),
+        };
+
+        builtForecast[String(h)] = fp;
+        builtForecast[`${h}m`] = fp;
+        builtForecast[String(targetM)] = fp;
+      });
+
       const fullTwin: TwinFull = {
         twin_id: twinId,
         id: twinId,
@@ -178,7 +226,7 @@ export default function DemosPage() {
           stage_probs: latestVisit.stage_probs,
           confidence: latestVisit.stage_probs[latestVisit.stage],
           tier_used: "T3",
-          forecast: latestVisit.forecast,
+          forecast: builtForecast,
           conversion_risk: latestVisit.conversion_risk,
         },
         history: builtVisits.map((v) => ({
