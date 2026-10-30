@@ -118,3 +118,4 @@ If a demonstration requires showing a high-error / difficult prognosis scenario:
 - **Candidate Subject**: `013_S_1120` (De-identified Alias: **Clara Hughes**, Age $80$, Male, APOE $\varepsilon4=1$, Amnestic MCI)
 - **12-Month MMSE Error**: **$6.00$ points** (**$98.5\text{th}$ percentile**)
 - **Clinical Feature**: Patient exhibited acute cognitive volatility (MMSE swung from 27 down to 21 within 12 months despite CDR remaining at 0.5), demonstrating the clinical necessity of the 90% predictive interval bounds and reliability flags.
+

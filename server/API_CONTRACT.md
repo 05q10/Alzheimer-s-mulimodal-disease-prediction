@@ -427,6 +427,180 @@ Returns held-out test metrics, valid clinical bounds and scopes, limitations lis
 }
 ```
 
+### 10. `GET /demo/cases` — List Held-Out Replay Cases
+
+Returns all transparently selected, held-out ADNI test patient replay cases (`case_a_stable_cn`, `case_b_cn_to_mci`, `case_c_mci_to_ad`, `case_d_stable_mci`, `case_hard_cognitive_volatility`).
+
+**Response** (`200 OK`):
+```json
+[
+  {
+    "case_id": "case_a_stable_cn",
+    "alias": "Eleanor Vance",
+    "trajectory_type": "Stable Cognitively Normal (CN)",
+    "baseline_stage": "CN",
+    "brief": "Patient is a 76-year-old female with 16 years education and zero APOE e4 alleles...",
+    "demographics": { "age": 76.0, "sex": 1, "education_years": 16.0, "apoe4_count": 0 },
+    "num_visits": 4,
+    "illustrative_mri_available": true
+  }
+]
+```
+
+---
+
+### 11. `POST /demo/replay/{case}/start` — Start Replay from Visit 0
+
+Initializes digital twin strictly from baseline Visit 0 (month 0). Precomputes and freezes SHA-256 pre-visit prediction for Visit 1 before any subsequent data is revealed.
+
+**Query Parameters / Body**:
+- `include_mri`: `boolean` (default: `true`, attach illustrative Kaggle MRI slice)
+
+**Response** (`200 OK`):
+```json
+{
+  "twin": { /* TwinFull state at baseline */ },
+  "replay": {
+    "twin_id": "uuid",
+    "case_id": "case_a_stable_cn",
+    "alias": "Eleanor Vance",
+    "current_visit_index": 0,
+    "total_visits": 4,
+    "is_complete": false,
+    "pending_pre_visit_prediction": {
+      "visit_index": 1,
+      "target_month": 6,
+      "anchor_month": 0,
+      "horizon_months": 6,
+      "predicted_MMSE": 29.9,
+      "predicted_MMSE_band": { "lo": 27.6, "hi": 30.0 },
+      "predicted_CDGLOBAL": 0.0,
+      "predicted_CDGLOBAL_band": { "lo": 0.0, "hi": 0.1 },
+      "predicted_TOTSCORE": 4.1,
+      "predicted_TOTSCORE_band": { "lo": 0.0, "hi": 9.0 },
+      "predicted_stage": "CN",
+      "prediction_hash": "sha256_hex_digest"
+    }
+  }
+}
+```
+
+---
+
+### 12. `POST /demo/replay/{case}/next` — Advance Replay (Predict Before Reveal)
+
+Advances replay to visit $k$. Enforces strict pre-visit prediction hash integrity, reveals true ADNI scores, computes score errors and 90% band containment, records stage agreement, and freezes next forecast.
+
+**Query Parameters / Body**:
+- `twin_id`: `string` (optional, defaults to active twin for case)
+
+**Response** (`200 OK`):
+```json
+{
+  "twin": { /* Updated TwinFull */ },
+  "evaluation": {
+    "visit_index": 1,
+    "month": 6,
+    "exam_date": "2025-03-01",
+    "actual_scores": { "MMSE": 29.0, "CDGLOBAL": 0.0, "TOTSCORE": 6.0 },
+    "predicted_scores": {
+      "MMSE": 29.9,
+      "MMSE_band": { "lo": 27.6, "hi": 30.0 },
+      "CDGLOBAL": 0.0,
+      "CDGLOBAL_band": { "lo": 0.0, "hi": 0.1 },
+      "TOTSCORE": 4.1,
+      "TOTSCORE_band": { "lo": 0.0, "hi": 9.0 }
+    },
+    "errors": {
+      "MMSE": -0.9,
+      "abs_MMSE": 0.9,
+      "in_band_MMSE": true,
+      "CDGLOBAL": 0.0,
+      "abs_CDGLOBAL": 0.0,
+      "in_band_CDGLOBAL": true,
+      "TOTSCORE": 1.9,
+      "abs_TOTSCORE": 1.9,
+      "in_band_TOTSCORE": true
+    },
+    "stage_comparison": {
+      "true_stage": "CN",
+      "predicted_stage": "CN",
+      "stage_agrees": true
+    },
+    "prediction_hash": "sha256_hex_digest",
+    "pre_visit_timestamp": "2026-10-30T10:00:00Z",
+    "reveal_timestamp": "2026-10-30T10:00:01Z"
+  },
+  "replay": { /* Updated run state */ }
+}
+```
+
+---
+
+### 13. `GET /demo/replay/{case}/report` — Replay Audit Report
+
+Returns visit-by-visit audit table and summary metrics (MAE per score, stage agreement rate, 90% predictive interval band coverage).
+
+**Response** (`200 OK`):
+```json
+{
+  "case_id": "case_a_stable_cn",
+  "twin_id": "uuid",
+  "alias": "Eleanor Vance",
+  "trajectory_type": "Stable Cognitively Normal (CN)",
+  "baseline_stage": "CN",
+  "is_complete": true,
+  "summary_metrics": {
+    "num_evaluated_visits": 3,
+    "mae_MMSE": 0.60,
+    "mae_CDGLOBAL": 0.000,
+    "mae_TOTSCORE": 2.08,
+    "stage_agreement_rate": 1.0,
+    "band_coverage_rate": 1.0,
+    "empirical_percentiles": {
+      "MMSE": { "6m": 42.0, "12m": 44.6, "24m": 0.0 }
+    }
+  },
+  "visits": [ /* All 4 visits with evaluations */ ]
+}
+```
+
+---
+
+### 14. `GET /demo/replay/summary` — Population Evidence vs Replay Summary
+
+Returns population test set metrics ($N = 456$, $3,022$ visits) alongside the 4 replay patient summaries and anchor error percentiles.
+
+**Response** (`200 OK`):
+```json
+{
+  "evidence_statement": "Four patients are an illustration and the test-set metrics are the evidence.",
+  "population_test_metrics": {
+    "cohort_evidence": "456 subjects, 3,022 visits strictly partitioned in held-out test split (server/data/splits.json)",
+    "stager_model_a": { ... },
+    "progression_model_b": { ... }
+  },
+  "anchor_error_distribution": { ... },
+  "replay_patients": [
+    {
+      "case_id": "case_a_stable_cn",
+      "alias": "Eleanor Vance",
+      "mae_MMSE": 0.60,
+      "mae_CDGLOBAL": 0.000,
+      "mae_TOTSCORE": 2.08,
+      "stage_agreement_rate": 1.0,
+      "band_coverage_rate": 1.0
+    }
+  ]
+}
+```
+
+---
+
+### 15. `POST /demo/replay/{case}/reset` — Reset Replay
+
+Resets digital twin and replay state strictly back to baseline Visit 0, recomputing the pre-visit prediction for Visit 1.
+
 ---
 
 ## Key Schemas
