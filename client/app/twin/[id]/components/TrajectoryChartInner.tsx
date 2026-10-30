@@ -40,6 +40,7 @@ interface ChartRow {
   calendarDate?: string;
   observed?: number | null;
   forecast?: number | null;
+  predictedVal?: number | null;
   uncertaintyLo?: number | null;
   uncertaintyHi?: number | null;
   bandOffset?: number | null;
@@ -167,7 +168,14 @@ export default function TrajectoryChartInner({
         meanVal = (fc[metricConfig.key_mean] as number | null) ?? null;
         loVal = (fc[metricConfig.key_lo] as number | null) ?? null;
         hiVal = (fc[metricConfig.key_hi] as number | null) ?? null;
-      } else if (m === maxObsMonth && obsVal !== null) {
+      } else if (visit && (visit as any).predicted_scores?.[metric] !== undefined) {
+        meanVal = (visit as any).predicted_scores[metric];
+        const b = (visit as any).predicted_scores[`${metric}_band`];
+        if (b) {
+          loVal = b.lo;
+          hiVal = b.hi;
+        }
+      } else if (m === 0 && obsVal !== null) {
         meanVal = obsVal;
         loVal = obsVal;
         hiVal = obsVal;
@@ -211,7 +219,8 @@ export default function TrajectoryChartInner({
         monthLabel: `M${m} · ${calDate}`,
         calendarDate: calDate,
         observed: isObserved ? obsVal : null,
-        forecast: m >= maxObsMonth ? meanVal : null,
+        forecast: meanVal,
+        predictedVal: meanVal,
         uncertaintyLo: loVal,
         uncertaintyHi: hiVal,
         bandOffset,
@@ -450,23 +459,41 @@ export default function TrajectoryChartInner({
               content={({ active, payload, label }) => {
                 if (!active || !payload || !payload.length) return null;
                 const row = payload[0].payload as ChartRow;
+                const hasObs = row.observed !== null && row.observed !== undefined;
+                const predVal = row.predictedVal ?? row.forecast;
+                const hasPred = predVal !== null && predVal !== undefined;
+                const diff = hasObs && hasPred && row.month > 0 ? Number((predVal! - row.observed!).toFixed(1)) : null;
+                const inBand = hasObs && row.uncertaintyLo !== null && row.uncertaintyHi !== null
+                  ? (row.observed! >= row.uncertaintyLo && row.observed! <= row.uncertaintyHi)
+                  : null;
+
                 return (
-                  <div className="rounded-xl bg-neutral-950/95 border border-white/20 p-3 shadow-xl backdrop-blur-md text-xs">
-                    <p className="font-bold text-white mb-1.5">
-                      {label} ({row.month} months)
-                    </p>
-                    {row.observed !== null && row.observed !== undefined && (
-                      <div className="flex justify-between gap-4 text-blue-300">
-                        <span>Observed:</span>
-                        <span className="font-mono font-bold">
+                  <div className="rounded-xl bg-neutral-950/95 border border-white/20 p-3.5 shadow-2xl backdrop-blur-md text-xs min-w-[230px]">
+                    <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-white/10">
+                      <p className="font-bold text-white text-sm">
+                        {label}
+                      </p>
+                      <span className="text-[10px] text-neutral-400 font-mono">
+                        {row.month === 0 ? "Baseline" : `Month ${row.month}`}
+                      </span>
+                    </div>
+
+                    {hasObs && (
+                      <div className="flex justify-between gap-4 py-0.5 text-blue-300">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                          Observed (Cohort):
+                        </span>
+                        <span className="font-mono font-bold text-white">
                           {row.observed} {metricConfig.unit}
                         </span>
                       </div>
                     )}
+
                     {baselineForecast ? (
                       <>
                         {row.baselineForecastVal !== null && row.baselineForecastVal !== undefined && (
-                          <div className="flex justify-between gap-4 text-neutral-400">
+                          <div className="flex justify-between gap-4 py-0.5 text-neutral-400">
                             <span>Baseline Forecast:</span>
                             <span className="font-mono font-bold">
                               {row.baselineForecastVal}
@@ -474,7 +501,7 @@ export default function TrajectoryChartInner({
                           </div>
                         )}
                         {row.scenarioForecastVal !== null && row.scenarioForecastVal !== undefined && (
-                          <div className="flex justify-between gap-4 text-purple-300">
+                          <div className="flex justify-between gap-4 py-0.5 text-purple-300">
                             <span>Scenario Forecast:</span>
                             <span className="font-mono font-bold">
                               {row.scenarioForecastVal}
@@ -484,17 +511,37 @@ export default function TrajectoryChartInner({
                       </>
                     ) : (
                       <>
-                        {row.forecast !== null && row.forecast !== undefined && (
-                          <div className="flex justify-between gap-4 text-purple-300">
-                            <span>Model Forecast:</span>
-                            <span className="font-mono font-bold">{row.forecast}</span>
+                        {hasPred && (
+                          <div className="flex justify-between gap-4 py-0.5 text-purple-300">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span>
+                              Model Forecast:
+                            </span>
+                            <span className="font-mono font-bold text-purple-200">
+                              {predVal} {metricConfig.unit}
+                            </span>
                           </div>
                         )}
+
+                        {diff !== null && (
+                          <div className="flex justify-between gap-4 py-0.5 text-neutral-400">
+                            <span>Residual Error (Δ):</span>
+                            <span className={`font-mono font-semibold ${Math.abs(diff) <= 1.5 ? "text-emerald-400" : "text-amber-400"}`}>
+                              {diff > 0 ? `+${diff}` : diff} pts
+                            </span>
+                          </div>
+                        )}
+
                         {row.uncertaintyLo !== null && row.uncertaintyHi !== null && (
-                          <div className="flex justify-between gap-4 text-neutral-400 mt-1 pt-1 border-t border-white/10">
+                          <div className="mt-1.5 pt-1.5 border-t border-white/10 flex justify-between items-center text-neutral-400">
                             <span>Likely range (90%):</span>
-                            <span className="font-mono text-purple-200">
+                            <span className="font-mono text-purple-200 font-semibold">
                               [{row.uncertaintyLo} – {row.uncertaintyHi}]
+                              {inBand !== null && (
+                                <span className={`ml-1.5 px-1 py-0.5 rounded text-[10px] font-bold ${inBand ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800" : "bg-amber-950/80 text-amber-400 border border-amber-800"}`}>
+                                  {inBand ? "✓ In Band" : "⚠ Out"}
+                                </span>
+                              )}
                             </span>
                           </div>
                         )}
