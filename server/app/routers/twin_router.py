@@ -21,6 +21,7 @@ from app.models.twin_models import (
     ScenarioRequest, ScenarioResponse,
     DemoPatientEntry, ModelCardMetrics,
     InputUsageResponse, TwinExplanationResponse,
+    ReplayStartRequest, ReplayNextRequest, ReplayResetRequest, DemoCaseSummary,
 )
 from ml.twin.constants import FUSION_DISCLAIMER
 from app.twin import (
@@ -38,6 +39,10 @@ from app.twin import (
     get_twin_explain as svc_get_twin_explain,
 )
 from app.demo_patients import initialize_demo_patients
+from app.replay_engine import (
+    get_cases_index, start_replay, advance_replay,
+    reset_replay, get_replay_report, get_replay_summary
+)
 
 router = APIRouter(prefix="", tags=["Digital Twin"])
 WEIGHTS_DIR = Path(__file__).resolve().parent.parent.parent / "ml" / "twin" / "weights"
@@ -211,6 +216,75 @@ def simulate_route(twin_id: str, req: SimulateRequest):
 def list_demo_patients():
     """Returns demo patients derived from the TEST split plus synthetic scenarios."""
     return initialize_demo_patients()
+
+
+# ── Held-Out ADNI Demo Replay Routes ──────────────────────────────────────
+
+@router.get("/demo/cases", response_model=List[DemoCaseSummary],
+            summary="List transparently selected, held-out ADNI replay cases")
+def list_demo_cases():
+    """List 4 verified real ADNI test cohort cases (+1 cognitive volatility benchmark)."""
+    return get_cases_index()
+
+
+@router.post("/demo/replay/{case}/start", summary="Start verified ADNI patient replay from Visit 0")
+def start_replay_route(
+    case: str,
+    include_mri: bool = Query(True, description="Whether to attach illustrative Kaggle MRI slices"),
+    body: Optional[ReplayStartRequest] = None
+):
+    """
+    Initialize digital twin strictly from Visit 0 (month 0).
+    Precomputes and freezes SHA-256 pre-visit prediction for Visit 1 before any subsequent visit is revealed.
+    """
+    inc = body.include_mri if body and body.include_mri is not None else include_mri
+    return start_replay(case_id=case, include_mri=inc)
+
+
+@router.post("/demo/replay/{case}/next", summary="Ingest next visit with strict predict-before-reveal evaluation")
+def next_replay_route(
+    case: str,
+    twin_id: Optional[str] = Query(None, description="Active twin ID to advance"),
+    body: Optional[ReplayNextRequest] = None
+):
+    """
+    Advance replay to next visit.
+    Verifies pre-visit prediction hash integrity, reveals true ADNI scores, evaluates errors against
+    frozen prediction and 90% bands, and precomputes next horizon forecast.
+    """
+    tid = body.twin_id if body and body.twin_id else twin_id
+    return advance_replay(case_id=case, twin_id=tid)
+
+
+@router.post("/demo/replay/{case}/reset", summary="Reset replay session strictly back to Visit 0")
+def reset_replay_route(
+    case: str,
+    twin_id: Optional[str] = Query(None, description="Active twin ID to reset"),
+    body: Optional[ReplayResetRequest] = None
+):
+    """Reset digital twin and replay state strictly back to baseline Visit 0."""
+    tid = body.twin_id if body and body.twin_id else twin_id
+    return reset_replay(case_id=case, twin_id=tid)
+
+
+@router.get("/demo/replay/{case}/report", summary="Retrieve visit-by-visit audit report and metrics for a replay")
+def get_replay_report_route(
+    case: str,
+    twin_id: Optional[str] = Query(None, description="Active twin ID")
+):
+    """Return visit-by-visit evaluation table, score errors, 90% band coverage, and clinical agreement."""
+    return get_replay_report(case_id=case, twin_id=twin_id)
+
+
+@router.get("/demo/replay/summary", summary="Population evidence vs replay patient summaries")
+def get_replay_summary_route():
+    """
+    Returns population test-set metrics (N=456, 3,022 visits) alongside the 4 replay patient summaries
+    and empirical error percentiles.
+    Statement: 'Four patients are an illustration and the test-set metrics are the evidence.'
+    """
+    return get_replay_summary()
+
 
 
 @router.get("/model-card", response_model=ModelCardMetrics,

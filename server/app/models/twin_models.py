@@ -316,3 +316,32 @@ class ModelCardMetrics(BaseModel):
     fusion_disclaimer: str
     data_provenance: Dict[str, Any]
     lifestyle_modifier: Optional[Dict[str, Any]] = None
+
+
+# ── Demo Replay Models ───────────────────────────────────────────────────
+
+class ReplayStartRequest(BaseModel):
+    """POST /demo/replay/{case}/start"""
+    include_mri: bool = Field(default=True, description="Attach illustrative Kaggle MRI slice for visit")
+
+
+class ReplayNextRequest(BaseModel):
+    """POST /demo/replay/{case}/next"""
+    twin_id: Optional[str] = Field(default=None, description="Active twin ID to advance")
+
+
+class ReplayResetRequest(BaseModel):
+    """POST /demo/replay/{case}/reset"""
+    twin_id: Optional[str] = Field(default=None, description="Active twin ID to reset")
+
+
+class DemoCaseSummary(BaseModel):
+    case_id: str
+    alias: str
+    trajectory_type: str
+    baseline_stage: str
+    brief: str
+    demographics: Dict[str, Any]
+    num_visits: int
+    illustrative_mri_available: bool
+
