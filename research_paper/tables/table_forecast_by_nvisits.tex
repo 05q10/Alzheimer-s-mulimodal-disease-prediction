@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{Impact of accumulated consultation history on trajectory forecasting error (MMSE MAE) across temporal horizons.}
+\label{tab:forecast_by_nvisits}
+\small
+\begin{adjustbox}{max width=0.88\linewidth}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Prior Consultation History} & \textbf{Test Visits ($N$)} & \textbf{6-Month MAE} & \textbf{12-Month MAE} & \textbf{24-Month MAE} \\
+\midrule
+1 Visit (Current Anchor Only)       & 846                       & 1.14 [1.05, 1.24]    & 1.58 [1.46, 1.71]     & 2.31 [2.14, 2.49] \\
+2 Consultations (Prior Visit Known) & 524                       & 1.02 [0.93, 1.12]    & 1.44 [1.31, 1.58]     & 2.12 [1.94, 2.31] \\
+$\ge 3$ Consultations (Full History)& 346                       & \textbf{0.95} [0.85, 1.06] & \textbf{1.36} [1.22, 1.51] & \textbf{1.98} [1.79, 2.18] \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

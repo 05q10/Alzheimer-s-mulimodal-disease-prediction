@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{Structured audit of scientific claims versus empirical validation evidence and recognized clinical boundaries.}
+\label{tab:claims_vs_evidence}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{3.2cm}p{5.5cm}p{6.5cm}}
+\toprule
+\textbf{Core Scientific Claim} & \textbf{Empirical Evidence \& Metrics} & \textbf{Recognized Clinical Boundary / Caveat} \\
+\midrule
+Multi-tier staging handles missing modalities cleanly & Tier T4 Macro-F1 = 0.796 [0.769, 0.824]; Tier T2b Macro-F1 = 0.788 [0.759, 0.817] on $N=3,022$ un-imputed visits & Bedside Tier T1b collapses without CDR (F1=0.656), requiring functional triage for syndromic separation. \\
+Model B accurately forecasts 24-month cognitive curves & MMSE MAE = 1.14 (6m), 1.58 (12m), 2.31 (24m); significantly beats persistence ($p < 0.001$) & Short-horizon CDR Global change is too subtle over 6 months to outperform persistence ($0.064$ vs $0.061$). \\
+Recurrent neural models do not surpass tabular ensembles & Binary-Masked BiLSTM achieves 84.03\% Acc vs. CatBoost 84.63\% Acc on identical test windows ($N=846$) & Recurrent models require sequence padding and lack fast, exact tree-based SHAP attributions. \\
+Lifestyle modifications provide plausible risk shifts & Modifier strictly bounded in $[0.85, 1.35]$ with square-root shrinkage ($\text{RR}^{0.5}$) & Multipliers reflect literature priors (Lancet 2024), not causal effects learned longitudinally from ADNI. \\
+2D MRI and OCR modules operate as auxiliary aids & ResNet-34 late fusion weighted at $w=0.20$ ($T=2.0$); OCR requires clinician verification & 2D slice classification does not replace FreeSurfer volumetric 3D analysis; not an autonomous diagnostic device. \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

@@ -1,0 +1,20 @@
+\begin{table}[t]
+\centering
+\caption{Step-by-step intermediate calculations for Eleanor Vance (Demo Case 1: Stable Cognitively Normal) across the Digital Twin pipeline.}
+\label{tab:demo_case1_audit}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lllp{6.0cm}}
+\toprule
+\textbf{Pipeline Stage} & \textbf{Intermediate Output} & \textbf{Value / Decision} & \textbf{Clinical Rationale \& Algorithmic State} \\
+\midrule
+1. Intake Validation    & Dynamic Tier Evaluated       & Tier T2b (Core Battery)   & Demographics, APOE4, MMSE, CDR, FAQ, ADAS11 available \\
+2. Stage Staging        & Calibrated Probabilities     & $P(\text{CN}) = 0.94$, $P(\text{MCI}) = 0.05$, $P(\text{AD}) = 0.01$ & Temperature scaling ($T=0.8554$) yields decisive CN diagnosis \\
+3. Top Stage Drivers    & TreeSHAP Attributions        & MMSE: $-1.42$, CDR: $-1.15$, ADAS: $-0.68$ & High cognitive reserve pushes log-odds strongly away from dementia \\
+4. Progression Forecast & 12-Month MMSE Prediction     & 28.8 points (Band: $[26.4, 30.0]$) & Residual uncertainty envelope indicates stable preserved function \\
+5. Conversion Hazard    & 12-Month Progression Risk    & $P(\text{progression}) = 0.04$ (4.0\%) & Low hazard matches Quintile 1 classification ($< 8\%$) \\
+6. Modality Withholding & Leave-One-Out Re-evaluation  & Without Battery: $P(\text{CN}) = 0.88$ & Robust classification even if specialized batteries are withheld \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

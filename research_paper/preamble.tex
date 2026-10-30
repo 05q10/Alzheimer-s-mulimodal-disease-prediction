@@ -27,25 +27,24 @@
 \usepackage{caption}
 \usepackage{microtype}
 
+\usepackage{placeins}
+\usepackage{tikz}
+\usepackage{tabularx}
+
 % Include generated macros from make_numbers.py
 \input{numbers.tex}
 
 % Image placeholder macro
-% Usage: \figph{filename_without_extension}{caption_text}{label_text}
+% Usage: \figph{filename_without_extension}{width_fraction}{fallback_height}
 \newcommand{\figph}[3]{%
-  \begin{figure}[H]
-    \centering
+  \IfFileExists{figures/#1.png}{%
+    \includegraphics[width=#2\linewidth]{figures/#1.png}%
+  }{%
     \IfFileExists{figures/#1.pdf}{%
-      \includegraphics[width=0.88\linewidth]{figures/#1.pdf}%
+      \includegraphics[width=#2\linewidth]{figures/#1.pdf}%
     }{%
-      \IfFileExists{figures/#1.png}{%
-        \includegraphics[width=0.88\linewidth]{figures/#1.png}%
-      }{%
-        \framebox[\linewidth]{\rule{0pt}{140pt}\Large\textbf{PLACEHOLDER: figures/#1}}%
-      }%
+      \fcolorbox{gray}{gray!8}{\parbox[c][#3][c]{\dimexpr#2\linewidth-2\fboxsep-2\fboxrule\relax}{\centering\small\textbf{[Image placeholder]}\\\scriptsize figures/\detokenize{#1}.png}}%
     }%
-    \caption{#2}
-    \label{#3}
-  \end{figure}%
+  }%
 }
 

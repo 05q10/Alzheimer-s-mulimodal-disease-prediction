@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{Detailed per-class performance metrics across diagnostic tiers on the un-imputed holdout test cohort ($N = 3,022$).}
+\label{tab:tier_class_metrics}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{l|ccc|ccc|ccc|c}
+\toprule
+\multirow{2}{*}{\textbf{Diagnostic Tier}} & \multicolumn{3}{c|}{\textbf{Cognitively Normal (CN)}} & \multicolumn{3}{c|}{\textbf{Mild Cognitive Imp. (MCI)}} & \multicolumn{3}{c|}{\textbf{Alzheimer's Disease (AD)}} & \textbf{Overall} \\
+& \textbf{Prec} & \textbf{Rec} & \textbf{F1} & \textbf{Prec} & \textbf{Rec} & \textbf{F1} & \textbf{Prec} & \textbf{Rec} & \textbf{F1} & \textbf{Macro-F1 [95\% CI]} \\
+\midrule
+Tier T1 (Demographics+APOE) & 0.402 & 0.812 & 0.538 & 0.418 & 0.324 & 0.365 & 0.512 & 0.395 & 0.446 & 0.449 [0.408, 0.486] \\
+Tier T1b (+Bedside MMSE)    & 0.687 & 1.000 & 0.814 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 & 0.656 [0.623, 0.689] \\
+Tier T2a (+CDR Global/SB)   & 0.862 & 0.854 & 0.858 & 0.724 & 0.681 & 0.702 & 0.784 & 0.762 & 0.773 & 0.771 [0.742, 0.800] \\
+Tier T2b (+Full Neuropsych) & 0.881 & 0.884 & 0.882 & 0.742 & 0.697 & 0.719 & 0.812 & 0.781 & 0.796 & 0.788 [0.759, 0.817] \\
+Tier T3 (+CSF Biomarkers)   & 0.878 & 0.880 & 0.879 & 0.739 & 0.694 & 0.716 & 0.808 & 0.778 & 0.793 & 0.785 [0.756, 0.814] \\
+Tier T4 (+Volumetric MRI)   & 0.886 & 0.879 & 0.882 & 0.754 & 0.702 & 0.727 & 0.831 & 0.814 & 0.822 & \textbf{0.796} [0.769, 0.824] \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

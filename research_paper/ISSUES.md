@@ -99,3 +99,23 @@ The Bidirectional LSTM model (`server/ml/lstm_model/model_weights/lstm_model.ker
   2. Integrated comprehensive narrative descriptions of the BiLSTM architecture in Section 1 (Introduction), Section 3.3 (Methodology), Section 4 (Results), and Appendix A (Model Architectures).
   3. Wrapped all 11 tables in `\begin{adjustbox}{max width=\linewidth}` and re-balanced column widths in `research_paper/scripts/make_numbers.py` and `research_paper/preamble.tex`, guaranteeing zero margin overflow on Overleaf and local LaTeX compilers.
 
+
+---
+
+## 8. Sequential Recurrent Models: 589 Subjects vs. 456 Subjects Split
+### Description
+`lstm-gru-masking-no-masking.ipynb` evaluated 589 test subjects (1,340 sliding sequence windows), whereas the standardized production pipeline splits the 3,034 cohort into 456 test subjects (846 sequence windows).
+
+### Cause & Resolution
+- **Cause**: The exploratory notebook used an unstratified 80/20 train/test split on 2,945 available subjects with complete sequence windows. The production pipeline enforces patient-level stratified splitting on `(baseline_DX, ever_converted)` across all 3,034 subjects (70/15/15 ratio), leaving 456 test subjects.
+- **Resolution in Paper**: Both results are retained and explicitly contextualized: Table~\ref{tab:seq_model_compare} reports the controlled evaluation on the 846 standardized test sequence windows, while citing the exploratory 1,340-window findings as preliminary research evidence.
+
+---
+
+## 9. Biomarker Ensemble Accuracy: 63.3% vs. 48.1%
+### Description
+Earlier text reported 63.3% accuracy for the fluid biomarker model, while Appendix C listed 48.1% [0.435, 0.526].
+
+### Cause & Resolution
+- **Cause**: 63.3% reflects an Optuna-tuned multi-algorithm ensemble (Random Forest, Extra Trees, LightGBM) evaluated on a balanced 3,000-row ADNI CSF subset in exploratory Phase 1. 48.1% reflects the single-algorithm baseline Random Forest evaluated under strict cluster bootstrap across unselected visits in `06_bootstrap_results.txt`.
+- **Resolution in Paper**: Both sources are cited with their respective sample sizes, algorithms, and validation protocols, removing any silent ambiguity.

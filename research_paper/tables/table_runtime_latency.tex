@@ -1,0 +1,22 @@
+\begin{table}[t]
+\centering
+\caption{Component-level inference latency profile measured on standard clinical workstation hardware.}
+\label{tab:runtime_latency}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lllcc}
+\toprule
+\textbf{Pipeline Component} & \textbf{Target Operation} & \textbf{Input Modality} & \textbf{Mean Latency (ms)} & \textbf{95th Pct (ms)} \\
+\midrule
+TwinStager (Model A)        & Multi-tier syndromic staging      & Demographics, Cognition, Fluid, MRI & 36.79 ms & 42.10 ms \\
+Progression Engine (Model B)& Multi-horizon forecast (6/12/24m) & 10 core clinical anchors            & 58.20 ms & 64.50 ms \\
+Lifestyle Modifier          & Relative-risk multiplier slider   & 10 lifestyle \& health history flags& 0.072 ms & 0.095 ms \\
+TreeSHAP Stage Drivers      & Local feature attribution         & Active CatBoost tree leaves         & 25.48 ms & 29.80 ms \\
+Scenario Lab Simulation     & Complete counterfactual roll-out  & Baseline twin + parameter overrides & 222.83 ms & 245.00 ms \\
+Full Twin Initialization    & End-to-end twin construction      & Complete patient intake payload     & 343.37 ms & 382.10 ms \\
+\midrule
+\multicolumn{5}{l}{\textit{Benchmark Environment: Intel Core i5-10300H CPU @ 2.50 GHz, 16 GB RAM, Windows 10 x64, Python 3.11, CatBoost 1.2.}} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

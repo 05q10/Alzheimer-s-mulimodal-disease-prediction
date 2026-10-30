@@ -1,0 +1,40 @@
+\begin{table}[t]
+\centering
+\caption{Lineage and scope mapping for all 43 patient intake fields across the Digital Twin pipeline.}
+\label{tab:intake_lineage_43}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{2.8cm}llp{4.5cm}p{4.2cm}}
+\toprule
+\textbf{Intake Category} & \textbf{Field Identifier} & \textbf{Type / Units} & \textbf{Direct Model Consumer} & \textbf{Missing-Value / Scope Handling} \\
+\midrule
+\multirow{4}{*}{\textbf{Demographics \& Genetics}} 
+& \texttt{age} & Float (Years) & Model A (T1), Model B Anchor & Mandatory; Valid range: $[40, 100]$ \\
+& \texttt{sex} & Categorical (0/1) & Model A (T1), Model B Anchor & Mandatory; $0 = \text{Male}, 1 = \text{Female}$ \\
+& \texttt{education} & Float (Years) & Model A (T1), Model B Anchor & Imputed to cohort median if omitted \\
+& \texttt{genotype} (\texttt{APOE4}) & Integer ($0, 1, 2$) & Model A (T1), Model B Anchor & Model handles missingness natively \\
+\midrule
+\multirow{6}{*}{\textbf{Cognitive Batteries}}
+& \texttt{MMSE} & Float ($0$--$30$) & Model A (T1b+), Model B Target & Scope warning if outside $[0, 30]$ \\
+& \texttt{CDR\_global} & Float ($0, 0.5, 1, 2, 3$) & Model A (T2a+), Model B Target & Discrete staging; triggers tier upgrade \\
+& \texttt{CDR\_sb} & Float ($0$--$18$) & Model A (T2a+), Model B Target & Continuous impairment metric \\
+& \texttt{ADAS11\_total} & Float ($0$--$70$) & Model A (T2b+), Model B Target & Higher = severe impairment \\
+& \texttt{FAQ} & Float ($0$--$30$) & Model A (T2b+), Model B Anchor & Daily functional independence \\
+& \texttt{MOCA} & Float ($0$--$30$) & Model A (T2b+), Model B Anchor & Executive & visuospatial battery \\
+\midrule
+\multirow{2}{*}{\textbf{Imaging \& Biomarkers}}
+& \texttt{mri\_volumes} & Continuous ($\text{mm}^3$) & Model A (Tier T4) & FreeSurfer Combat-normalized volumes \\
+& \texttt{ABETA, TAU, PTAU} & Continuous ($\text{pg/mL}$) & Model A (Tier T3), Bio Ensemble & Censored values bounded at assay limits \\
+\midrule
+\multirow{2}{*}{\textbf{Auxiliary \& Medical}}
+& \texttt{mri\_image} & 2D DICOM / PNG & ResNet-34 4-Class MRI Classifier & Late fusion logit adjustment ($w=0.20$) \\
+& \texttt{blood\_report\_ocr} & Document Scan & Vision-LLaMA Parsing Pipeline & Requires human clinician sign-off \\
+\midrule
+\multirow{3}{*}{\textbf{Lifestyle \& Health History}}
+& \texttt{smoking, alcohol} & Integer Scale ($0$--$3$) & Scenario Lab Progression Multiplier & Clamped within modifier $[0.85, 1.35]$ \\
+& \texttt{diet, exercise, sleep}& Integer Scale ($0$--$10$) & Scenario Lab Progression Multiplier & Square-root shrinkage applied \\
+& \texttt{hypertension, diabetes}& Binary ($0/1$) & Scenario Lab Progression Multiplier & Informs trajectory slope modulation \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

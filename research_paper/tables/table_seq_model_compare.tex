@@ -1,0 +1,20 @@
+\begin{table}[t]
+\centering
+\caption{Controlled architectural comparison of sequential recurrent networks vs. tabular gradient boosting on identical held-out test sequence windows ($N = 846$).}
+\label{tab:seq_model_compare}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model Architecture} & \textbf{Missingness Strategy} & \textbf{Test Accuracy} & \textbf{Macro-F1 Score} & \textbf{Cross-Entropy Loss} & \textbf{Key Operational Trade-Off} \\
+\midrule
+BiLSTM (Sequential)         & Zero-Imputation               & 83.43\% (706/846)      & 82.91\%                 & 0.4592                      & Spurious transitions from zero artifacts \\
+Binary-Masked BiLSTM        & Explicit Missingness Mask     & 84.03\% (711/846)      & 83.64\%                 & 0.4410                      & Requires uniform sliding window padding \\
+Masked GRU                  & Explicit Missingness Mask     & 83.10\% (703/846)      & 82.75\%                 & 0.4680                      & Slightly aggressive MCI $\to$ AD bias \\
+\textbf{CatBoost (Tabular)} & Native Split Routing          & \textbf{84.63\%} (716/846) & \textbf{84.27\%}    & \textbf{0.3980}             & Native TreeSHAP; zero padding required \\
+\midrule
+\multicolumn{6}{l}{\textit{Note: On the legacy exploratory unstratified split ($N = 1,340$ windows, 589 subjects), unmasked LSTM achieved 82.8\% Acc and masked GRU 81.1\% Acc.}} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\caption{Observational completeness and missingness rates across clinical diagnostic modalities in the $N = 21,055$ time-axis cohort.}
+\label{tab:missingness_by_modality}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Diagnostic Modality} & \textbf{Representative Clinical Features} & \textbf{Available Visits} & \textbf{Missing Visits} & \textbf{Observational Completeness} \\
+\midrule
+Demographics & Patient Age, Biological Sex, Education Years & 21,055 & 0 & 100.0\% \\
+Genetics & APOE Genotype ($\varepsilon4$ Allele Count) & 17,764 & 3,291 & 84.4\% (15.6\% Missing) \\
+Functional Triage & Clinical Dementia Rating (CDGLOBAL, CDRSB) & 15,827 & 5,228 & 75.2\% (24.8\% Missing) \\
+Bedside Screener & Mini-Mental State Examination (MMSE) & 13,427 & 7,628 & 63.8\% (36.2\% Missing) \\
+Daily Function & Functional Activities Questionnaire (FAQTOTAL) & 12,783 & 8,272 & 60.7\% (39.3\% Missing) \\
+Neuropsych Battery & ADAS11-Cog Total Cognitive Score (TOTSCORE) & 12,420 & 8,635 & 59.0\% (41.0\% Missing) \\
+Structural MRI & FreeSurfer Volumetric Regions (Hippocampus/Ventricles) & 11,110 & 9,945 & 52.8\% (47.2\% Missing) \\
+Advanced Cognition & Montreal Cognitive Assessment (MOCA) & 5,160 & 15,895 & 24.5\% (75.5\% Missing) \\
+Lumbar Puncture & Cerebrospinal Fluid Biomarkers (A$\beta_{42}$, t-tau, p-tau) & 3,383 & 17,672 & 16.1\% (83.9\% Missing) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

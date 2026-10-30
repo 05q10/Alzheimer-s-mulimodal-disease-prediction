@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{System evolution and modular lineage: cross-referencing prototype components with their current production role and ADNI benchmark inclusion.}
+\label{tab:earlier_phase_heritage}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{p{3.2cm}p{4.2cm}p{5.5cm}c}
+\toprule
+\textbf{Earlier Module} & \textbf{Original Scope (Phases 1 \& 2)} & \textbf{Current Role in Digital Twin Architecture} & \textbf{Included in ADNI Metrics?} \\
+\midrule
+Kaggle Clinical Screener & 2,149-subject cross-sectional lifestyle dataset (CatBoost 95.6\% Acc) & Rapid symptom checklist in Intake Module; informs lifestyle multiplier priors & No (External Prototype) \\
+ResNet-34 2D MRI & 4-class slice classifier on Kaggle MRI (99.7\% internal slice Acc) & Downweighted auxiliary visual observer; fused into Model A logits ($w=0.20, T=2.0$) & No (Ablation / Auxiliary) \\
+Optuna Biomarker Ensemble & Blended Random Forest + Extra Trees + LightGBM on 3,000 ADNI CSF subset & Baseline comparative ensemble; informs Model A Tier T3 biomarker feature routing & No (Prototype Subset) \\
+Vision-LLaMA Lab OCR & Multimodal LLM transcription of laboratory and clinical reports & Intake parsing accelerator; requires mandatory clinician review before staging & No (Intake Utility) \\
+Sequential BiLSTM / GRU & Temporal neural models evaluated on unstratified 589-subject sequences & Investigated in Phase 2; CatBoost selected for native missingness and TreeSHAP & Yes (Phase 2 Comparison) \\
+Calibrated Multi-Tier Stager & Initial Tier T1--T4 CatBoost models with exploratory metrics & Primary cross-sectional engine (Model A) with sample weighting and temperature scaling & Yes (Core Primary Stager) \\
+Progression Forecaster & Multi-target CatBoost regressors on 10 anchor inputs & Primary longitudinal engine (Model B) across 6, 12, and 24-month clinical horizons & Yes (Core Primary Regressor) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

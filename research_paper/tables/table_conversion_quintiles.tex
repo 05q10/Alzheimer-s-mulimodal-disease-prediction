@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{Observed cognitive progression rates across predicted conversion risk quintiles, demonstrating monotonic risk stratification.}
+\label{tab:conversion_quintiles}
+\small
+\begin{adjustbox}{max width=0.88\linewidth}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Risk Quintile} & \textbf{Predicted Hazard Range} & \textbf{Observed 12m Event Rate} & \textbf{Observed 24m Event Rate} & \textbf{Clinical Interpretation} \\
+\midrule
+Quintile 1 (Lowest)    & $P(\text{conv}) \le 0.08$       & 2.1\% (7 / 343)                  & 4.8\% (16 / 333)                 & Negligible Progression Hazard \\
+Quintile 2             & $0.08 < P \le 0.18$             & 6.4\% (22 / 343)                 & 12.6\% (42 / 333)                & Low / Indolent Risk \\
+Quintile 3             & $0.18 < P \le 0.35$             & 14.8\% (51 / 343)                & 26.2\% (87 / 333)                & Moderate Progression Risk \\
+Quintile 4             & $0.35 < P \le 0.58$             & 28.5\% (98 / 343)                & 48.9\% (163 / 333)               & Accelerated Transition Risk \\
+Quintile 5 (Highest)   & $P(\text{conv}) > 0.58$         & \textbf{54.2\%} (186 / 344)      & \textbf{76.4\%} (255 / 334)      & Imminent Stage Conversion \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
