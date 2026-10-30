@@ -87,3 +87,14 @@ This changelog records all empirical, mathematical, and algorithmic discrepancie
 - **Old Text**: Draft text mentioned 3,330 visits in one place and 3,022 in another.
 - **New Text**: Resolves the exact count: the raw Parquet file contains 3,194 visits for the 456 test subjects. Filtering for valid time-axis visits (`exclude_time_axis == 0`) and confirmed diagnostic labels (`DIAGNOSIS IN [1, 2, 3]`) yields exactly **3,022 time-axis test visits**.
 - **Evidence / Source**: `server/experiments/results/exp09_stager_results.md` and `server/data/unified_visits.parquet`.
+
+
+---
+
+## 12. LaTeX Syntax & Overleaf Compilation Fixes
+- **Issue**: Unescaped `&` within `\textbf{Clinical & Algorithmic Definition}` at line 177 in `main.tex` and within cell text of `table_intake_lineage_43.tex` caused a fatal compilation abort (`! Forbidden control sequence found while scanning use of \check@nocorr@. ! Missing } inserted.` and `Extra alignment tab has been changed to \cr`).
+- **Fix**:
+  - Escaped ampersands in `main.tex` lines 177, 573, 574, 709, 1117, 1123.
+  - Escaped `&` in `table_intake_lineage_43.tex` at line 23 (`Executive \& visuospatial battery`) and in `scripts/make_numbers.py` and `scripts/build_full_paper.py`.
+  - Audited all 26 table files in `research_paper/tables/` with automated validator (`scripts/validate_tables.py`), confirming 0 delimiter discrepancies across all tabular environments.
+- **Evidence / Source**: `scripts/validate_tables.py` and Overleaf compilation logs.

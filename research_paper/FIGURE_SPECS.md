@@ -295,3 +295,4 @@ This document specifies every figure used in the research paper, including its f
 - **Plot Type**: Structured architectural phase comparison schema.
 - **Axes**: Categorical phase blocks.
 - **Key Takeaway**: Summarizes the technological progression: Phase 1 (cross-sectional multimodal screener) and Phase 2 (BiLSTM/GRU recurrent modeling) provided essential empirical baselines that culminated in Phase 3's production-ready, calibrated hierarchical digital twin.
+

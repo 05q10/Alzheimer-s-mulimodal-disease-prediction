@@ -174,7 +174,7 @@ The Multimodal Digital Twin framework is organized as a hierarchical, multi-stag
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llp{7.5cm}}
 \toprule
-\textbf{Symbol} & \textbf{Mathematical Domain} & \textbf{Clinical & Algorithmic Definition} \\
+\textbf{Symbol} & \textbf{Mathematical Domain} & \textbf{Clinical \& Algorithmic Definition} \\
 \midrule
 $x_t \in \mathcal{X}$ & $\mathbb{R}^{D_t}$ & Observed feature vector at consultation visit $t$, where dimension $D_t$ depends on available modalities. \\
 $y_t \in \mathcal{Y}$ & $\{1, 2, 3\}$ & Ground-truth syndromic category: Cognitively Normal ($1: \text{CN}$), Mild Cognitive Impairment ($2: \text{MCI}$), Alzheimer's Disease ($3: \text{AD}$). \\
@@ -570,8 +570,8 @@ Model~A was benchmarked across all six diagnostic tiers on the un-imputed holdou
 \end{figure*}
 
 \begin{itemize}
-    \item \textbf{Tier T1 & T1b (Bedside Screening Collapse)}: Tier T1 (demographics + genetics) achieves a modest Macro-F1 of 0.449 [0.408, 0.486]. Augmenting with MMSE (Tier T1b) increases apparent accuracy to 0.687, but Macro-F1 remains low at 0.656 [0.623, 0.689]. Inspection of the confusion matrix (Fig.~\ref{fig:stager_cm_t1b}) reveals an important clinical finding: without functional impairment measures (CDR), the model predicts CN for all test visits (CN recall = 1.000, MCI recall = 0.000, AD recall = 0.000). Bedside MMSE alone lacks sufficient discriminative margin to separate early cognitive impairment in a community screening context without functional verification.
-    \item \textbf{Tier T2a & T2b (Functional Battery Recovery)}: Incorporating functional impairment via CDR Global and CDR-SB (Tier T2a) resolves this collapse, surging Macro-F1 to 0.771 [0.742, 0.800]. Augmenting with the full neuropsychological battery (ADAS11, FAQ, MoCA; Tier T2b) further elevates Macro-F1 to 0.788 [0.759, 0.817], yielding balanced recall across stages (88.4\% CN, 69.7\% MCI, 78.1\% AD).
+    \item \textbf{Tier T1 \& T1b (Bedside Screening Collapse)}: Tier T1 (demographics + genetics) achieves a modest Macro-F1 of 0.449 [0.408, 0.486]. Augmenting with MMSE (Tier T1b) increases apparent accuracy to 0.687, but Macro-F1 remains low at 0.656 [0.623, 0.689]. Inspection of the confusion matrix (Fig.~\ref{fig:stager_cm_t1b}) reveals an important clinical finding: without functional impairment measures (CDR), the model predicts CN for all test visits (CN recall = 1.000, MCI recall = 0.000, AD recall = 0.000). Bedside MMSE alone lacks sufficient discriminative margin to separate early cognitive impairment in a community screening context without functional verification.
+    \item \textbf{Tier T2a \& T2b (Functional Battery Recovery)}: Incorporating functional impairment via CDR Global and CDR-SB (Tier T2a) resolves this collapse, surging Macro-F1 to 0.771 [0.742, 0.800]. Augmenting with the full neuropsychological battery (ADAS11, FAQ, MoCA; Tier T2b) further elevates Macro-F1 to 0.788 [0.759, 0.817], yielding balanced recall across stages (88.4\% CN, 69.7\% MCI, 78.1\% AD).
     \item \textbf{Tier T4 (Peak Multimodal Performance)}: Integrating FreeSurfer volumetric MRI (Tier T4) achieves peak performance: Accuracy = 0.811, Macro-F1 = \textbf{0.796} [0.769, 0.824], and ECE = 0.0192. AD recall reaches 81.4\% (Fig.~\ref{fig:tier_per_class_recall}), confirming that structural volumetric biomarkers provide essential diagnostic gain for severe syndromic discrimination.
 \end{itemize}
 
@@ -706,7 +706,7 @@ A controlled architectural comparison between sequential deep recurrent networks
 \begin{subfigure}[t]{0.48\linewidth}
     \centering
     \figph{fig_seq_model_compare}{1.0}{130pt}
-    \caption{Accuracy & Macro-F1 Comparison.}
+    \caption{Accuracy \& Macro-F1 Comparison.}
     \label{fig:seq_model_compare}
 \end{subfigure}
 \hfill
