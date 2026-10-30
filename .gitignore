@@ -134,3 +134,7 @@ server/experiments/results/*.parquet
 # Allow non-patient result files
 !server/experiments/results/*.md
 !server/experiments/figures/
+
+# Demo Replay data & internal mappings (strictly confidential, ADNI-derived)
+server/data/demo_replay/
+server/data/.demo_replay_mapping.json
